@@ -1,6 +1,7 @@
 import { PageMetadata, Point, ViewportTransform } from './types.js';
 import { scanlineFloodFill } from './floodFill.js';
 import { HistoryManager } from './history.js';
+import { AudioManager } from '../audio/audioManager.js';
 
 export class CanvasManager {
   private displayCanvas: HTMLCanvasElement;
@@ -53,6 +54,13 @@ export class CanvasManager {
     window.addEventListener('resize', () => {
       this.handleResize();
       this.fitToScreen();
+    });
+
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => {
+        this.handleResize();
+        this.fitToScreen();
+      }, 100);
     });
 
     // Automatically observe parent resize / visibility changes
@@ -111,6 +119,8 @@ export class CanvasManager {
 
   /**
    * Reset zoom and center the 1024x1024 canvas in the display viewport.
+   * Dynamically adapts insets for portrait, landscape, mobile, and tablets
+   * to ensure zero obstruction by the floating header or bottom palette dock.
    */
   public fitToScreen(): void {
     const parent = this.displayCanvas.parentElement;
@@ -120,13 +130,37 @@ export class CanvasManager {
     const viewH = parent.clientHeight;
     if (viewW <= 0 || viewH <= 0) return;
 
-    const padding = 32;
-    const availableW = Math.max(viewW - padding * 2, 100);
-    const availableH = Math.max(viewH - padding * 2, 100);
+    // Adaptive insets based on device orientation and compact dimensions
+    let topInset = 70;
+    let bottomInset = 160;
+    let sideInset = 24;
+
+    const isLandscape = viewW > viewH;
+    const isCompactHeight = viewH < 620;
+
+    if (isLandscape && isCompactHeight) {
+      // Mobile / Compact Landscape: slim header & compact dock
+      topInset = 46;
+      bottomInset = 74;
+      sideInset = 16;
+    } else if (viewW <= 640) {
+      // Mobile Portrait: standard header & docked palette
+      topInset = 66;
+      bottomInset = 175;
+      sideInset = 12;
+    } else if (isLandscape) {
+      // Tablet / Desktop Landscape
+      topInset = 76;
+      bottomInset = 150;
+      sideInset = 32;
+    }
+
+    const availableW = Math.max(viewW - sideInset * 2, 80);
+    const availableH = Math.max(viewH - topInset - bottomInset, 80);
 
     const scale = Math.max(Math.min(availableW / this.canvasSize, availableH / this.canvasSize, 1.0), 0.1);
     const offsetX = (viewW - this.canvasSize * scale) / 2;
-    const offsetY = (viewH - this.canvasSize * scale) / 2;
+    const offsetY = topInset + (availableH - this.canvasSize * scale) / 2;
 
     this.transform = { scale, offsetX, offsetY };
     this.notifyTransform();
@@ -322,6 +356,7 @@ export class CanvasManager {
     if (changed) {
       this.colorCtx.putImageData(colorImgData, 0, 0);
       this.render();
+      AudioManager.playFillSound();
       if (this.onFillChange) {
         this.onFillChange(this.history.getActions().length);
       }

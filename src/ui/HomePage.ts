@@ -2,14 +2,20 @@ import { PageMetadata } from '../engine/types.js';
 import { PAGES } from '../pages/pageCatalog.js';
 import { StorageManager } from '../storage/storageManager.js';
 import { Logo } from './Logo.js';
+import { AudioManager } from '../audio/audioManager.js';
 
 export class HomePage {
   private element: HTMLElement;
   private onStartStudio: (page?: PageMetadata) => void;
+  private onOpenAudio?: () => void;
   private currentFilter: string = 'All';
 
-  constructor(onStartStudio: (page?: PageMetadata) => void) {
+  constructor(
+    onStartStudio: (page?: PageMetadata) => void,
+    onOpenAudio?: () => void
+  ) {
     this.onStartStudio = onStartStudio;
+    this.onOpenAudio = onOpenAudio;
     this.element = document.createElement('div');
     this.element.className = 'home-page';
     this.render();
@@ -41,6 +47,14 @@ export class HomePage {
         </div>
         <div class="home-nav-actions">
           <span class="home-badge-count">${PAGES.length} Zen Canvases</span>
+          <button class="btn-icon btn-home-audio ${AudioManager.getIsMusicPlaying() ? 'audio-playing' : ''}" id="home-audio-btn" title="Sound Sanctuary (Audio Settings)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18V5l12-2v13"></path>
+              <circle cx="6" cy="18" r="3"></circle>
+              <circle cx="18" cy="16" r="3"></circle>
+            </svg>
+            <span class="audio-dot-indicator ${AudioManager.getIsMusicPlaying() ? 'active' : ''}"></span>
+          </button>
           <button class="btn-primary-pill" id="home-nav-studio-btn">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
@@ -214,6 +228,14 @@ export class HomePage {
     const navStudioBtn = this.element.querySelector('#home-nav-studio-btn');
     navStudioBtn?.addEventListener('click', () => {
       this.onStartStudio(activePage);
+    });
+
+    // Nav Audio Settings
+    const homeAudioBtn = this.element.querySelector('#home-audio-btn');
+    homeAudioBtn?.addEventListener('click', () => {
+      if (this.onOpenAudio) {
+        this.onOpenAudio();
+      }
     });
 
     // Hero Continue / Start button

@@ -9,6 +9,8 @@ import { PAGES, getPageById } from './pages/pageCatalog.js';
 import { StorageManager } from './storage/storageManager.js';
 import { PageMetadata } from './engine/types.js';
 import { AdService } from './services/adService.js';
+import { AudioManager } from './audio/audioManager.js';
+import { AudioModal } from './ui/AudioModal.js';
 
 type ViewMode = 'home' | 'studio';
 
@@ -17,6 +19,7 @@ class App {
   private header!: FloatingHeader;
   private paletteTray!: PaletteTray;
   private galleryModal!: GalleryModal;
+  private audioModal!: AudioModal;
   private homePage!: HomePage;
   private currentPage!: PageMetadata;
 
@@ -30,6 +33,7 @@ class App {
   private async init(): Promise<void> {
     const appEl = document.getElementById('app')!;
     Toast.init();
+    AudioManager.initialize();
     await AdService.initialize();
 
     // 1. Studio View Wrapper
@@ -54,15 +58,23 @@ class App {
     });
     document.body.appendChild(this.galleryModal.getElement());
 
-    // 5. Initialize Header with Home and Gallery navigation
+    // 5. Initialize Audio Sanctuary Modal
+    this.audioModal = new AudioModal(() => {
+      this.header.updateAudioState();
+      this.homePage.refresh();
+    });
+    document.body.appendChild(this.audioModal.getElement());
+
+    // 6. Initialize Header with Home, Gallery, and Audio Sanctuary navigation
     this.header = new FloatingHeader(
       this.canvasManager,
       () => this.galleryModal.open(),
-      () => this.showHome()
+      () => this.showHome(),
+      () => this.audioModal.open()
     );
     this.studioContainer.appendChild(this.header.getElement());
 
-    // 6. Initialize Palette Dock
+    // 7. Initialize Palette Dock
     this.paletteTray = new PaletteTray(this.canvasManager);
     this.studioContainer.appendChild(this.paletteTray.getElement());
 
@@ -86,9 +98,14 @@ class App {
     });
 
     // 8. Initialize Home Page
-    this.homePage = new HomePage((selectedPage) => {
-      this.showStudio(selectedPage);
-    });
+    this.homePage = new HomePage(
+      (selectedPage) => {
+        this.showStudio(selectedPage);
+      },
+      () => {
+        this.audioModal.open();
+      }
+    );
 
     appEl.appendChild(this.homePage.getElement());
     appEl.appendChild(this.studioContainer);
@@ -129,6 +146,7 @@ class App {
 
     const pageToLoad = targetPage || this.currentPage || PAGES[0];
     await this.switchPage(pageToLoad);
+    this.header.updateAudioState();
     
     // Ensure display canvas fits perfectly to the screen
     requestAnimationFrame(() => {

@@ -3,23 +3,32 @@ import { PageMetadata } from '../engine/types.js';
 import { Toast } from './Toast.js';
 import { Logo } from './Logo.js';
 import { AdService } from '../services/adService.js';
+import { AudioManager } from '../audio/audioManager.js';
 
 export class FloatingHeader {
   private element: HTMLElement;
   private canvasManager: CanvasManager;
   private onOpenGallery: () => void;
   private onGoHome: () => void;
+  private onOpenAudio: () => void;
 
   private undoBtn!: HTMLButtonElement;
   private redoBtn!: HTMLButtonElement;
+  private audioBtn!: HTMLButtonElement;
   private zoomIndicator!: HTMLElement;
   private titleEl!: HTMLElement;
   private categoryEl!: HTMLElement;
 
-  constructor(canvasManager: CanvasManager, onOpenGallery: () => void, onGoHome: () => void) {
+  constructor(
+    canvasManager: CanvasManager,
+    onOpenGallery: () => void,
+    onGoHome: () => void,
+    onOpenAudio: () => void
+  ) {
     this.canvasManager = canvasManager;
     this.onOpenGallery = onOpenGallery;
     this.onGoHome = onGoHome;
+    this.onOpenAudio = onOpenAudio;
 
     this.element = document.createElement('header');
     this.element.className = 'floating-header';
@@ -105,6 +114,15 @@ export class FloatingHeader {
             </svg>
           </button>
 
+          <button class="btn-icon btn-audio-toggle ${AudioManager.getIsMusicPlaying() ? 'audio-playing' : ''}" id="btn-audio" title="Sound Sanctuary (Audio Settings)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18V5l12-2v13"></path>
+              <circle cx="6" cy="18" r="3"></circle>
+              <circle cx="18" cy="16" r="3"></circle>
+            </svg>
+            <span class="audio-dot-indicator ${AudioManager.getIsMusicPlaying() ? 'active' : ''}"></span>
+          </button>
+
           <button class="btn-icon" id="btn-clear" title="Reset Canvas">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 6h18"></path>
@@ -128,9 +146,28 @@ export class FloatingHeader {
 
     this.undoBtn = this.element.querySelector('#btn-undo')!;
     this.redoBtn = this.element.querySelector('#btn-redo')!;
+    this.audioBtn = this.element.querySelector('#btn-audio')!;
     this.zoomIndicator = this.element.querySelector('#zoom-indicator')!;
     this.titleEl = this.element.querySelector('#header-title')!;
     this.categoryEl = this.element.querySelector('#header-category')!;
+  }
+
+  public updateAudioState(): void {
+    if (!this.audioBtn) return;
+    const isPlaying = AudioManager.getIsMusicPlaying();
+    if (isPlaying) {
+      this.audioBtn.classList.add('audio-playing');
+    } else {
+      this.audioBtn.classList.remove('audio-playing');
+    }
+    const dot = this.audioBtn.querySelector('.audio-dot-indicator');
+    if (dot) {
+      if (isPlaying) {
+        dot.classList.add('active');
+      } else {
+        dot.classList.remove('active');
+      }
+    }
   }
 
   private setupListeners(): void {
@@ -150,6 +187,10 @@ export class FloatingHeader {
 
     this.redoBtn.addEventListener('click', () => {
       this.canvasManager.redo();
+    });
+
+    this.audioBtn.addEventListener('click', () => {
+      this.onOpenAudio();
     });
 
     this.element.querySelector('#btn-zoom-reset')?.addEventListener('click', () => {
