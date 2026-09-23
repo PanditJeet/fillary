@@ -4,10 +4,11 @@ export class HistoryManager {
   private undoStack: ImageData[] = [];
   private redoStack: ImageData[] = [];
   private actions: FillAction[] = [];
-  private maxHistory: number = 20;
+  private redoActions: FillAction[] = [];
+  private maxHistory: number = 25;
   private onStateChangeCallback?: (canUndo: boolean, canRedo: boolean) => void;
 
-  constructor(maxHistory = 20) {
+  constructor(maxHistory = 25) {
     this.maxHistory = maxHistory;
   }
 
@@ -37,6 +38,7 @@ export class HistoryManager {
     }
 
     this.redoStack = [];
+    this.redoActions = [];
     this.notify();
   }
 
@@ -53,7 +55,8 @@ export class HistoryManager {
 
     const previousState = this.undoStack.pop()!;
     if (this.actions.length > 0) {
-      this.actions.pop();
+      const poppedAction = this.actions.pop()!;
+      this.redoActions.push(poppedAction);
     }
 
     this.notify();
@@ -70,6 +73,11 @@ export class HistoryManager {
     );
     this.undoStack.push(currentCopy);
 
+    if (this.redoActions.length > 0) {
+      const restoredAction = this.redoActions.pop()!;
+      this.actions.push(restoredAction);
+    }
+
     const nextState = this.redoStack.pop()!;
     this.notify();
     return nextState;
@@ -79,6 +87,7 @@ export class HistoryManager {
     this.undoStack = [];
     this.redoStack = [];
     this.actions = [];
+    this.redoActions = [];
     this.notify();
   }
 
@@ -88,6 +97,8 @@ export class HistoryManager {
 
   public setActions(actions: FillAction[]): void {
     this.actions = [...actions];
+    this.redoActions = [];
+    this.notify();
   }
 
   public get canUndo(): boolean {

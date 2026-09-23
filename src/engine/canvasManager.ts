@@ -231,44 +231,54 @@ export class CanvasManager {
       const progress = isProgressObj ? (savedData as PageProgress) : null;
       const actions = isProgressObj ? progress!.actions : (savedData as Array<{ x: number; y: number; color: string }>);
 
-      if (progress && progress.dataUrl) {
-        // High-fidelity instant raster restore
+      if (actions && actions.length > 0) {
+        // Replay actions sequentially to recreate multi-step undo history
+        const colorImgData = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
+        for (const act of actions) {
+          // Push snapshot before this action
+          this.history.pushSnapshot(colorImgData, {
+            pageId: page.id,
+            x: act.x,
+            y: act.y,
+            color: act.color,
+            timestamp: Date.now()
+          });
+          scanlineFloodFill(colorImgData, this.lineArtMask, act.x, act.y, act.color);
+        }
+        this.colorCtx.putImageData(colorImgData, 0, 0);
+
+        // If raster dataUrl is present, overlay it to guarantee exact pixel restoration
+        if (progress && progress.dataUrl) {
+          await new Promise<void>((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              this.colorCtx.drawImage(img, 0, 0, this.canvasSize, this.canvasSize);
+              resolve();
+            };
+            img.onerror = () => resolve();
+            img.src = progress.dataUrl!;
+          });
+        }
+      } else if (progress && progress.dataUrl) {
+        // Only raster dataUrl saved (no actions array):
+        // Save initial white state as base snapshot so user can undo back to clean white!
+        const initialWhite = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
+        this.history.pushSnapshot(initialWhite);
+
         await new Promise<void>((resolve) => {
           const img = new Image();
           img.onload = () => {
             this.colorCtx.drawImage(img, 0, 0, this.canvasSize, this.canvasSize);
             resolve();
           };
-          img.onerror = () => {
-            if (actions && actions.length > 0) {
-              this.replayActions(actions);
-            }
-            resolve();
-          };
+          img.onerror = () => resolve();
           img.src = progress.dataUrl!;
         });
-      } else if (actions && actions.length > 0) {
-        this.replayActions(actions);
-      }
-
-      // Restore history so new fills append seamlessly
-      if (actions && actions.length > 0) {
-        this.history.setActions(actions as any);
-        const current = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
-        this.history.pushSnapshot(current);
       }
     }
 
     this.fitToScreen();
     this.render();
-  }
-
-  private replayActions(actions: Array<{ x: number; y: number; color: string }>): void {
-    const colorImgData = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
-    for (const act of actions) {
-      scanlineFloodFill(colorImgData, this.lineArtMask, act.x, act.y, act.color);
-    }
-    this.colorCtx.putImageData(colorImgData, 0, 0);
   }
 
   private renderImageFileToLineArtCanvas(url: string): Promise<void> {
@@ -290,7 +300,7 @@ export class CanvasManager {
           const b = d[i + 2];
           const lum = 0.299 * r + 0.587 * g + 0.114 * b;
 
-          if (lum > 185) {
+          if (lum > 210) {
             d[i + 3] = 0; // Pure transparent for all fillable areas
           } else {
             d[i] = 18;
@@ -348,6 +358,7 @@ export class CanvasManager {
     const imgData = this.lineArtCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
     const data = imgData.data;
     const len = this.canvasSize * this.canvasSize;
+    const rawMask = new Uint8Array(len);
 
     for (let i = 0; i < len; i++) {
       const idx = i * 4;
@@ -356,11 +367,54 @@ export class CanvasManager {
       const b = data[idx + 2];
       const a = data[idx + 3];
 
-      // If opaque/semi-opaque and sufficiently dark, treat as line border
-      if (a > 60 && (0.299 * r + 0.587 * g + 0.114 * b) < 180) {
-        this.lineArtMask[i] = 1;
+      // If opaque/semi-opaque and sufficiently dark (lum < 210), treat as line border
+      if (a > 60 && (0.299 * r + 0.587 * g + 0.114 * b) < 210) {
+        rawMask[i] = 1;
       } else {
-        this.lineArtMask[i] = 0;
+        rawMask[i] = 0;
+      }
+    }
+
+    // Morphological micro-gap and diagonal seal pass
+    // This bridges 1-2 pixel micro-gaps and diagonal touches,
+    // ensuring flood fill never bleeds between distinct objects.
+    const width = this.canvasSize;
+    const height = this.canvasSize;
+
+    for (let y = 0; y < height; y++) {
+      const yOffset = y * width;
+      for (let x = 0; x < width; x++) {
+        const idx = yOffset + x;
+        if (rawMask[idx] === 1) {
+          this.lineArtMask[idx] = 1;
+          continue;
+        }
+
+        const left = x > 0 && rawMask[idx - 1] === 1;
+        const right = x < width - 1 && rawMask[idx + 1] === 1;
+        const up = y > 0 && rawMask[idx - width] === 1;
+        const down = y < height - 1 && rawMask[idx + width] === 1;
+
+        // Bridge 1px micro-gaps horizontally or vertically
+        const hGap = left && right;
+        const vGap = up && down;
+
+        // Bridge diagonal corners so 4-connected scanline fill cannot slip diagonally
+        const diagCorner = (left && up) || (right && up) || (left && down) || (right && down);
+
+        // Bridge 2px micro-gaps
+        const left2 = x > 1 && rawMask[idx - 2] === 1;
+        const right2 = x < width - 2 && rawMask[idx + 2] === 1;
+        const up2 = y > 1 && rawMask[idx - width * 2] === 1;
+        const down2 = y < height - 2 && rawMask[idx + width * 2] === 1;
+        const hGap2 = (left && right2) || (left2 && right);
+        const vGap2 = (up && down2) || (up2 && down);
+
+        if (hGap || vGap || diagCorner || hGap2 || vGap2) {
+          this.lineArtMask[idx] = 1;
+        } else {
+          this.lineArtMask[idx] = 0;
+        }
       }
     }
   }
