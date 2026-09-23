@@ -92,7 +92,7 @@ function generateLotusMandalaSvg(): string {
   paths += `<circle cx="${cx}" cy="${cy}" r="22" stroke="#111111" stroke-width="4" fill="none" />`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-    <rect width="1024" height="1024" fill="#FFFFFF"/>
+
     ${paths}
   </svg>`;
 }
@@ -100,7 +100,7 @@ function generateLotusMandalaSvg(): string {
 // Generator for Japanese Zen Bonsai & Moon
 function generateBonsaiSvg(): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-    <rect width="1024" height="1024" fill="#FFFFFF"/>
+
     <!-- Outer Arch Frame -->
     <rect x="60" y="60" width="904" height="904" rx="40" stroke="#111111" stroke-width="6" fill="none"/>
     <rect x="85" y="85" width="854" height="854" rx="28" stroke="#111111" stroke-width="3" fill="none"/>
@@ -143,7 +143,7 @@ function generateBonsaiSvg(): string {
 // Generator for Zen Origami Crane & Water
 function generateOrigamiCraneSvg(): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-    <rect width="1024" height="1024" fill="#FFFFFF"/>
+
     <!-- Frame -->
     <rect x="60" y="60" width="904" height="904" rx="20" stroke="#111111" stroke-width="6" fill="none"/>
 
@@ -190,7 +190,7 @@ function generateOrigamiCraneSvg(): string {
 // Generator for Lush Monstera & Tropical Botanical Flora
 function generateBotanicalSvg(): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-    <rect width="1024" height="1024" fill="#FFFFFF"/>
+
     <!-- Outer Elegant Rounded Border -->
     <rect x="70" y="70" width="884" height="884" rx="40" stroke="#111111" stroke-width="6" fill="none"/>
 
@@ -250,7 +250,6 @@ function generateCelestialSvg(): string {
   }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-    <rect width="1024" height="1024" fill="#FFFFFF"/>
     <!-- Outer Frame -->
     <circle cx="512" cy="512" r="480" stroke="#111111" stroke-width="6" fill="none"/>
     <circle cx="512" cy="512" r="460" stroke="#111111" stroke-width="3" fill="none"/>

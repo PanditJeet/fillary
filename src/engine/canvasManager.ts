@@ -16,9 +16,7 @@ export class CanvasManager {
   private canvasSize: number = 1024;
 
   private transform: ViewportTransform = { scale: 1, offsetX: 0, offsetY: 0 };
-  private isDragging: boolean = false;
   private dragStart: Point = { x: 0, y: 0 };
-  private dragDistance: number = 0;
 
   // Touch tracking for pinch-to-zoom
   private activeTouchPointers: Map<number, Point> = new Map();
@@ -180,6 +178,20 @@ export class CanvasManager {
       img.onload = () => {
         this.lineArtCtx.clearRect(0, 0, this.canvasSize, this.canvasSize);
         this.lineArtCtx.drawImage(img, 0, 0, this.canvasSize, this.canvasSize);
+
+        // Strip any white/near-white pixels to transparent to guarantee colors underneath are visible
+        const imgData = this.lineArtCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
+        const d = imgData.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i];
+          const g = d[i + 1];
+          const b = d[i + 2];
+          if (r > 210 && g > 210 && b > 210) {
+            d[i + 3] = 0; // Set alpha to 0 so it never occludes colors
+          }
+        }
+        this.lineArtCtx.putImageData(imgData, 0, 0);
+
         URL.revokeObjectURL(url);
         resolve();
       };
@@ -206,7 +218,7 @@ export class CanvasManager {
       const a = data[idx + 3];
 
       // If opaque/semi-opaque and sufficiently dark, treat as line border
-      if (a > 60 && (0.299 * r + 0.587 * g + 0.114 * b) < 170) {
+      if (a > 60 && (0.299 * r + 0.587 * g + 0.114 * b) < 180) {
         this.lineArtMask[i] = 1;
       } else {
         this.lineArtMask[i] = 0;
@@ -304,7 +316,7 @@ export class CanvasManager {
     this.displayCtx.save();
     this.displayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // Minimalist zen background paper tint
+    // Minimalist zen dark background around artwork
     this.displayCtx.fillStyle = '#0F1117';
     this.displayCtx.fillRect(0, 0, rect.width, rect.height);
 
@@ -324,7 +336,7 @@ export class CanvasManager {
     // 1. Draw color layer
     this.displayCtx.drawImage(this.colorCanvas, 0, 0);
 
-    // 2. Draw line-art layer on top
+    // 2. Draw line-art layer on top (transparent background, only black lines)
     this.displayCtx.drawImage(this.lineArtCanvas, 0, 0);
 
     this.displayCtx.restore();
@@ -351,31 +363,46 @@ export class CanvasManager {
   }
 
   private setupEventListeners(): void {
+    const PAN_THRESHOLD = 7;
+    let isMouseDown = false;
+    let isActuallyPanning = false;
+    let mouseDownPos = { x: 0, y: 0 };
+
     // Mouse events
     this.displayCanvas.addEventListener('mousedown', (e) => {
-      this.isDragging = true;
-      this.dragDistance = 0;
+      if (e.button !== 0 && e.button !== 1) return;
+      isMouseDown = true;
+      isActuallyPanning = false;
+      mouseDownPos = { x: e.clientX, y: e.clientY };
       this.dragStart = { x: e.clientX, y: e.clientY };
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (!this.isDragging) return;
-      const dx = e.clientX - this.dragStart.x;
-      const dy = e.clientY - this.dragStart.y;
-      this.dragDistance += Math.hypot(dx, dy);
+      if (!isMouseDown) return;
 
-      this.transform.offsetX += dx;
-      this.transform.offsetY += dy;
-      this.dragStart = { x: e.clientX, y: e.clientY };
-      this.render();
+      const totalDist = Math.hypot(e.clientX - mouseDownPos.x, e.clientY - mouseDownPos.y);
+      if (!isActuallyPanning && totalDist > PAN_THRESHOLD) {
+        isActuallyPanning = true;
+      }
+
+      if (isActuallyPanning) {
+        const dx = e.clientX - this.dragStart.x;
+        const dy = e.clientY - this.dragStart.y;
+        this.transform.offsetX += dx;
+        this.transform.offsetY += dy;
+        this.dragStart = { x: e.clientX, y: e.clientY };
+        this.render();
+      }
     });
 
     window.addEventListener('mouseup', (e) => {
-      if (!this.isDragging) return;
-      this.isDragging = false;
+      if (!isMouseDown) return;
+      isMouseDown = false;
 
-      // If moved less than 5 pixels, it's an intentional tap to fill!
-      if (this.dragDistance < 5) {
+      const totalDist = Math.hypot(e.clientX - mouseDownPos.x, e.clientY - mouseDownPos.y);
+
+      // If user did not pan past threshold, it's an intentional tap to fill!
+      if (!isActuallyPanning && totalDist <= PAN_THRESHOLD) {
         const rect = this.displayCanvas.getBoundingClientRect();
         this.fillAtScreenPoint(e.clientX - rect.left, e.clientY - rect.top);
       }
@@ -392,6 +419,9 @@ export class CanvasManager {
     }, { passive: false });
 
     // Touch events for mobile/tablet (pinch-to-zoom + pan + tap)
+    let touchStartPos = { x: 0, y: 0 };
+    let isTouchPanning = false;
+
     this.displayCanvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
       for (let i = 0; i < e.changedTouches.length; i++) {
@@ -399,17 +429,19 @@ export class CanvasManager {
         this.activeTouchPointers.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
       }
 
-      if (this.activeTouchPointers.size === 1) {
+      if (e.touches.length === 1) {
         const t = e.touches[0];
+        touchStartPos = { x: t.clientX, y: t.clientY };
         this.dragStart = { x: t.clientX, y: t.clientY };
-        this.dragDistance = 0;
-      } else if (this.activeTouchPointers.size === 2) {
-        const touches = Array.from(this.activeTouchPointers.values());
-        this.initialPinchDistance = Math.hypot(touches[0].x - touches[1].x, touches[0].y - touches[1].y);
+        isTouchPanning = false;
+      } else if (e.touches.length === 2) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        this.initialPinchDistance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         this.initialPinchScale = this.transform.scale;
         this.pinchCenter = {
-          x: (touches[0].x + touches[1].x) / 2,
-          y: (touches[0].y + touches[1].y) / 2
+          x: (t1.clientX + t2.clientX) / 2,
+          y: (t1.clientY + t2.clientY) / 2
         };
       }
     }, { passive: false });
@@ -421,19 +453,25 @@ export class CanvasManager {
         this.activeTouchPointers.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
       }
 
-      if (this.activeTouchPointers.size === 1) {
-        const touch = e.touches[0];
-        const dx = touch.clientX - this.dragStart.x;
-        const dy = touch.clientY - this.dragStart.y;
-        this.dragDistance += Math.hypot(dx, dy);
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        const totalDist = Math.hypot(t.clientX - touchStartPos.x, t.clientY - touchStartPos.y);
+        if (!isTouchPanning && totalDist > 10) {
+          isTouchPanning = true;
+        }
 
-        this.transform.offsetX += dx;
-        this.transform.offsetY += dy;
-        this.dragStart = { x: touch.clientX, y: touch.clientY };
-        this.render();
-      } else if (this.activeTouchPointers.size === 2) {
-        const touches = Array.from(this.activeTouchPointers.values());
-        const currentDist = Math.hypot(touches[0].x - touches[1].x, touches[0].y - touches[1].y);
+        if (isTouchPanning) {
+          const dx = t.clientX - this.dragStart.x;
+          const dy = t.clientY - this.dragStart.y;
+          this.transform.offsetX += dx;
+          this.transform.offsetY += dy;
+          this.dragStart = { x: t.clientX, y: t.clientY };
+          this.render();
+        }
+      } else if (e.touches.length === 2) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         if (this.initialPinchDistance > 0) {
           const factor = currentDist / this.initialPinchDistance;
           const rect = this.displayCanvas.getBoundingClientRect();
@@ -448,7 +486,7 @@ export class CanvasManager {
         this.activeTouchPointers.delete(touch.identifier);
       }
 
-      if (this.activeTouchPointers.size === 0 && this.dragDistance < 8) {
+      if (e.touches.length === 0 && !isTouchPanning) {
         const touch = e.changedTouches[0];
         const rect = this.displayCanvas.getBoundingClientRect();
         this.fillAtScreenPoint(touch.clientX - rect.left, touch.clientY - rect.top);

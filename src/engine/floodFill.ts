@@ -32,13 +32,13 @@ export function parseColor(colorStr: string): RGBAColor {
 }
 
 /**
- * Packs RGBA into a single 32-bit integer matching system endianness.
+ * Packs RGBA into a single 32-bit unsigned integer matching system endianness.
  */
 export function packRGBA(r: number, g: number, b: number, a = 255): number {
   if (isLittleEndian) {
-    return ((a & 0xff) << 24) | ((b & 0xff) << 16) | ((g & 0xff) << 8) | (r & 0xff);
+    return (((a & 0xff) << 24) | ((b & 0xff) << 16) | ((g & 0xff) << 8) | (r & 0xff)) >>> 0;
   } else {
-    return ((r & 0xff) << 24) | ((g & 0xff) << 16) | ((b & 0xff) << 8) | (a & 0xff);
+    return (((r & 0xff) << 24) | ((g & 0xff) << 16) | ((b & 0xff) << 8) | (a & 0xff)) >>> 0;
   }
 }
 
@@ -52,7 +52,7 @@ export function findNearestFillablePixel(
   width: number,
   height: number,
   lineArtMask: Uint8Array,
-  maxRadius = 4
+  maxRadius = 8
 ): { x: number; y: number } | null {
   const index = startY * width + startX;
   if (lineArtMask[index] === 0) {
