@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Fillary</string>
+    <string name="title_activity_main">Fillary</string>
+    <string name="package_name">com.fillary.app</string>
+    <string name="custom_url_scheme">com.fillary.app</string>
+</resources>
