@@ -88,5 +88,13 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     difficulty: 'Gentle',
     description: 'A cozy kid curled up in a blanket fort reading a magical storybook with a warm mug and kitten.',
     imageUrl: '/pages/cozy-reader.jpg'
+  },
+  {
+    id: 'human-scientist',
+    title: 'Curious Junior Scientist',
+    category: 'Human Cartoons',
+    difficulty: 'Gentle',
+    description: 'A bright young scientist with safety goggles observing bubbling test tubes and a microscope.',
+    imageUrl: '/pages/junior-scientist.jpg'
   }
 ];
