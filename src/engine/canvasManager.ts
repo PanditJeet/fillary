@@ -50,7 +50,23 @@ export class CanvasManager {
     this.initColorCanvas();
     this.setupEventListeners();
     this.handleResize();
-    window.addEventListener('resize', () => this.handleResize());
+    window.addEventListener('resize', () => {
+      this.handleResize();
+      this.fitToScreen();
+    });
+
+    // Automatically observe parent resize / visibility changes
+    if (this.displayCanvas.parentElement && window.ResizeObserver) {
+      const ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+            this.handleResize();
+            this.fitToScreen();
+          }
+        }
+      });
+      ro.observe(this.displayCanvas.parentElement);
+    }
   }
 
   private initColorCanvas(): void {
@@ -80,6 +96,8 @@ export class CanvasManager {
 
     const width = parent.clientWidth;
     const height = parent.clientHeight;
+    if (width <= 0 || height <= 0) return;
+
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
 
     this.displayCanvas.width = width * dpr;
@@ -100,12 +118,13 @@ export class CanvasManager {
 
     const viewW = parent.clientWidth;
     const viewH = parent.clientHeight;
+    if (viewW <= 0 || viewH <= 0) return;
+
     const padding = 32;
+    const availableW = Math.max(viewW - padding * 2, 100);
+    const availableH = Math.max(viewH - padding * 2, 100);
 
-    const availableW = viewW - padding * 2;
-    const availableH = viewH - padding * 2;
-
-    const scale = Math.min(availableW / this.canvasSize, availableH / this.canvasSize, 1.0);
+    const scale = Math.max(Math.min(availableW / this.canvasSize, availableH / this.canvasSize, 1.0), 0.1);
     const offsetX = (viewW - this.canvasSize * scale) / 2;
     const offsetY = (viewH - this.canvasSize * scale) / 2;
 

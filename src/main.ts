@@ -121,13 +121,22 @@ class App {
     this.studioContainer.classList.remove('view-hidden');
     this.studioContainer.classList.add('view-active');
 
+    // Force synchronous reflow so clientWidth and clientHeight are populated
+    void this.studioContainer.offsetHeight;
+    this.canvasManager.handleResize();
+
     const pageToLoad = targetPage || this.currentPage || PAGES[0];
     await this.switchPage(pageToLoad);
     
-    // Fit canvas gracefully after view layout transitions
-    setTimeout(() => {
+    // Ensure display canvas fits perfectly to the screen
+    requestAnimationFrame(() => {
+      this.canvasManager.handleResize();
       this.canvasManager.fitToScreen();
-    }, 50);
+    });
+    setTimeout(() => {
+      this.canvasManager.handleResize();
+      this.canvasManager.fitToScreen();
+    }, 60);
   }
 
   private async switchPage(page: PageMetadata): Promise<void> {

@@ -255,10 +255,23 @@ export class HomePage {
       });
     });
 
-    // Individual Page Cards
+    // Individual Page Cards (Delegated on grid + direct card listener)
+    const grid = this.element.querySelector('.home-pages-grid');
+    grid?.addEventListener('click', (e) => {
+      const card = (e.target as HTMLElement).closest('.home-page-card');
+      if (card) {
+        const pageId = card.getAttribute('data-page-id');
+        const page = PAGES.find(p => p.id === pageId);
+        if (page) {
+          this.onStartStudio(page);
+        }
+      }
+    });
+
     const pageCards = this.element.querySelectorAll('.home-page-card');
     pageCards.forEach(card => {
-      card.addEventListener('click', () => {
+      card.addEventListener('click', (e) => {
+        e.stopPropagation();
         const pageId = card.getAttribute('data-page-id');
         const page = PAGES.find(p => p.id === pageId);
         if (page) {
