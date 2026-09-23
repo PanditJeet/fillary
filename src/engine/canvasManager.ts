@@ -2,6 +2,7 @@ import { PageMetadata, Point, ViewportTransform } from './types.js';
 import { scanlineFloodFill } from './floodFill.js';
 import { HistoryManager } from './history.js';
 import { AudioManager } from '../audio/audioManager.js';
+import { PageProgress } from '../storage/storageManager.js';
 
 export class CanvasManager {
   private displayCanvas: HTMLCanvasElement;
@@ -96,6 +97,14 @@ export class CanvasManager {
 
   public getCurrentColor(): string {
     return this.currentColor;
+  }
+
+  public getColorCanvasDataUrl(): string {
+    return this.colorCanvas.toDataURL('image/png');
+  }
+
+  public getHasFills(): boolean {
+    return this.history.getActions().length > 0;
   }
 
   public handleResize(): void {
@@ -194,10 +203,12 @@ export class CanvasManager {
   }
 
   /**
-   * Loads an SVG page, rasterizes line-art to 1024x1024, creates boundary mask,
-   * and replays any stored actions.
+   * Loads a line-art page, creates boundary mask, and restores any saved progress.
    */
-  public async loadPage(page: PageMetadata, savedActions?: Array<{ x: number; y: number; color: string }>): Promise<void> {
+  public async loadPage(
+    page: PageMetadata,
+    savedData?: PageProgress | Array<{ x: number; y: number; color: string }> | null
+  ): Promise<void> {
     this.currentPage = page;
     this.history.clear();
 
@@ -214,16 +225,50 @@ export class CanvasManager {
     // Compute boundary mask
     this.computeLineArtMask();
 
-    // Replay saved actions if any
-    if (savedActions && savedActions.length > 0) {
-      const colorImgData = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
-      for (const act of savedActions) {
-        scanlineFloodFill(colorImgData, this.lineArtMask, act.x, act.y, act.color);
+    // Restore saved progress if present
+    if (savedData) {
+      const isProgressObj = typeof savedData === 'object' && !Array.isArray(savedData) && 'pageId' in savedData;
+      const progress = isProgressObj ? (savedData as PageProgress) : null;
+      const actions = isProgressObj ? progress!.actions : (savedData as Array<{ x: number; y: number; color: string }>);
+
+      if (progress && progress.dataUrl) {
+        // High-fidelity instant raster restore
+        await new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            this.colorCtx.drawImage(img, 0, 0, this.canvasSize, this.canvasSize);
+            resolve();
+          };
+          img.onerror = () => {
+            if (actions && actions.length > 0) {
+              this.replayActions(actions);
+            }
+            resolve();
+          };
+          img.src = progress.dataUrl!;
+        });
+      } else if (actions && actions.length > 0) {
+        this.replayActions(actions);
       }
-      this.colorCtx.putImageData(colorImgData, 0, 0);
+
+      // Restore history so new fills append seamlessly
+      if (actions && actions.length > 0) {
+        this.history.setActions(actions as any);
+        const current = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
+        this.history.pushSnapshot(current);
+      }
     }
 
     this.fitToScreen();
+    this.render();
+  }
+
+  private replayActions(actions: Array<{ x: number; y: number; color: string }>): void {
+    const colorImgData = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
+    for (const act of actions) {
+      scanlineFloodFill(colorImgData, this.lineArtMask, act.x, act.y, act.color);
+    }
+    this.colorCtx.putImageData(colorImgData, 0, 0);
   }
 
   private renderImageFileToLineArtCanvas(url: string): Promise<void> {
@@ -392,8 +437,7 @@ export class CanvasManager {
 
   public resetCanvas(): void {
     if (!this.currentPage) return;
-    const current = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
-    this.history.pushSnapshot(current);
+    this.history.clear();
     this.initColorCanvas();
     this.render();
     if (this.onFillChange) {

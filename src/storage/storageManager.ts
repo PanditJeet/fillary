@@ -1,5 +1,12 @@
 import { FillAction } from '../engine/types.js';
 
+export interface PageProgress {
+  pageId: string;
+  dataUrl?: string; // High-resolution dataURL of color canvas
+  actions: FillAction[]; // History of fill actions
+  lastSaved: number;
+}
+
 const STORAGE_KEYS = {
   PAGE_PROGRESS_PREFIX: 'fillary_page_',
   RECENT_COLORS: 'fillary_recent_colors',
@@ -8,26 +15,82 @@ const STORAGE_KEYS = {
 };
 
 export class StorageManager {
-  public static savePageProgress(pageId: string, actions: FillAction[]): void {
+  /**
+   * Saves both the pixel-perfect raster canvas state and action history.
+   */
+  public static savePageProgress(pageId: string, actions: FillAction[], dataUrl?: string): void {
+    if (!pageId) return;
     try {
-      localStorage.setItem(`${STORAGE_KEYS.PAGE_PROGRESS_PREFIX}${pageId}`, JSON.stringify(actions));
+      const progress: PageProgress = {
+        pageId,
+        actions: actions || [],
+        dataUrl,
+        lastSaved: Date.now()
+      };
+      localStorage.setItem(`${STORAGE_KEYS.PAGE_PROGRESS_PREFIX}${pageId}`, JSON.stringify(progress));
     } catch (e) {
-      console.warn('Storage save failed:', e);
+      console.warn('Storage save failed with dataUrl, falling back to actions-only:', e);
+      // If quota exceeded due to dataUrl, fallback to storing actions only
+      try {
+        const fallback: PageProgress = {
+          pageId,
+          actions: actions || [],
+          lastSaved: Date.now()
+        };
+        localStorage.setItem(`${STORAGE_KEYS.PAGE_PROGRESS_PREFIX}${pageId}`, JSON.stringify(fallback));
+      } catch (inner) {
+        console.error('Critical storage save failure:', inner);
+      }
     }
   }
 
+  /**
+   * Retrieves full page progress including raster snapshot and action list.
+   * Handles both new PageProgress format and legacy FillAction[] arrays.
+   */
+  public static getPageProgress(pageId: string): PageProgress | null {
+    if (!pageId) return null;
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEYS.PAGE_PROGRESS_PREFIX}${pageId}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        // Legacy format: raw array of FillAction
+        return {
+          pageId,
+          actions: parsed,
+          lastSaved: Date.now()
+        };
+      }
+      return parsed as PageProgress;
+    } catch (e) {
+      console.warn('Storage load failed for page:', pageId, e);
+      return null;
+    }
+  }
+
+  /**
+   * Returns list of actions for backward-compatibility.
+   */
   public static loadPageProgress(pageId: string): FillAction[] {
-    try {
-      const data = localStorage.getItem(`${STORAGE_KEYS.PAGE_PROGRESS_PREFIX}${pageId}`);
-      if (!data) return [];
-      return JSON.parse(data) as FillAction[];
-    } catch (e) {
-      console.warn('Storage load failed:', e);
-      return [];
-    }
+    const progress = this.getPageProgress(pageId);
+    return progress ? progress.actions : [];
   }
 
+  /**
+   * Checks if page has saved progress.
+   */
+  public static hasPageProgress(pageId: string): boolean {
+    const progress = this.getPageProgress(pageId);
+    if (!progress) return false;
+    return !!progress.dataUrl || (progress.actions && progress.actions.length > 0);
+  }
+
+  /**
+   * Completely clears saved progress for a page.
+   */
   public static clearPageProgress(pageId: string): void {
+    if (!pageId) return;
     try {
       localStorage.removeItem(`${STORAGE_KEYS.PAGE_PROGRESS_PREFIX}${pageId}`);
     } catch (e) {

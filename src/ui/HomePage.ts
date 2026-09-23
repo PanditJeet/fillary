@@ -32,7 +32,10 @@ export class HomePage {
   private render(): void {
     const activePageId = StorageManager.getActivePageId();
     const activePage = PAGES.find(p => p.id === activePageId) || PAGES[0];
-    const savedActions = StorageManager.loadPageProgress(activePage.id);
+    const activeProgress = StorageManager.getPageProgress(activePage.id);
+    const activeActions = activeProgress ? activeProgress.actions : [];
+    const hasActiveProgress = StorageManager.hasPageProgress(activePage.id);
+    const activeThumb = activeProgress?.dataUrl;
 
     const categories = ['All', 'Animals', 'Human Cartoons', 'Mystical'];
     const filteredPages = this.currentFilter === 'All' 
@@ -88,7 +91,7 @@ export class HomePage {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
               </svg>
-              <span>${savedActions.length > 0 ? 'Continue Coloring' : 'Start Coloring'}</span>
+              <span>${hasActiveProgress ? 'Continue Coloring' : 'Start Coloring'}</span>
             </button>
 
             <button class="hero-btn-secondary" id="hero-browse-btn">
@@ -105,21 +108,27 @@ export class HomePage {
           <!-- Active Artwork Quick Resume Card -->
           <div class="home-active-card" id="home-active-card">
             <div class="active-card-thumb">
-              ${activePage.imageUrl 
-                ? `<img src="${activePage.imageUrl}" alt="${activePage.title}" />` 
-                : `<div class="active-svg-wrap">${activePage.svgContent || ''}</div>`
+              ${activeThumb
+                ? `<div class="active-thumb-wrap" style="position:relative; width:100%; height:100%; border-radius:inherit; overflow:hidden;">
+                     <img src="${activeThumb}" alt="${activePage.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain;" />
+                     ${activePage.imageUrl ? `<img src="${activePage.imageUrl}" alt="${activePage.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
+                   </div>`
+                : (activePage.imageUrl 
+                    ? `<img src="${activePage.imageUrl}" alt="${activePage.title}" />` 
+                    : `<div class="active-svg-wrap">${activePage.svgContent || ''}</div>`
+                  )
               }
             </div>
             <div class="active-card-details">
               <div class="active-card-meta">
-                <span class="active-card-tag">In Progress</span>
+                <span class="active-card-tag">${hasActiveProgress ? 'In Progress' : 'Featured Canvas'}</span>
                 <span class="active-card-cat">${activePage.category}</span>
               </div>
               <h3 class="active-card-title">${activePage.title}</h3>
-              <p class="active-card-info">${savedActions.length > 0 ? `${savedActions.length} color fills applied` : 'Ready to begin'}</p>
+              <p class="active-card-info">${hasActiveProgress ? `${activeActions.length > 0 ? activeActions.length : 'Artwork'} color fills applied` : 'Ready to begin'}</p>
             </div>
             <button class="btn-primary-pill" id="home-resume-btn">
-              <span>Resume</span>
+              <span>${hasActiveProgress ? 'Resume' : 'Start'}</span>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="9 18 15 12 9 6"></polyline>
               </svg>
@@ -147,31 +156,43 @@ export class HomePage {
 
           <!-- Canvases Grid -->
           <div class="home-pages-grid">
-            ${filteredPages.map(page => `
-              <div class="home-page-card" data-page-id="${page.id}">
-                <div class="home-card-thumb">
-                  ${page.imageUrl 
-                    ? `<img src="${page.imageUrl}" alt="${page.title}" loading="lazy" />` 
-                    : `<div class="home-svg-wrap">${page.svgContent || ''}</div>`
-                  }
-                  <div class="home-card-hover-overlay">
-                    <span class="overlay-color-btn">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                      </svg>
-                      Color Now
-                    </span>
+            ${filteredPages.map(page => {
+              const prog = StorageManager.getPageProgress(page.id);
+              const thumb = prog?.dataUrl;
+              const hasProg = StorageManager.hasPageProgress(page.id);
+              return `
+                <div class="home-page-card" data-page-id="${page.id}">
+                  <div class="home-card-thumb">
+                    ${thumb
+                      ? `<div class="home-thumb-composite" style="position:relative; width:100%; height:100%;">
+                           <img src="${thumb}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain;" />
+                           ${page.imageUrl ? `<img src="${page.imageUrl}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
+                         </div>`
+                      : (page.imageUrl 
+                          ? `<img src="${page.imageUrl}" alt="${page.title}" loading="lazy" />` 
+                          : `<div class="home-svg-wrap">${page.svgContent || ''}</div>`
+                        )
+                    }
+                    ${hasProg ? `<span class="home-card-progress-badge">In Progress</span>` : ''}
+                    <div class="home-card-hover-overlay">
+                      <span class="overlay-color-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        ${hasProg ? 'Continue' : 'Color Now'}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="home-card-info">
+                    <div class="home-card-meta">
+                      <span class="home-card-cat">${page.category}</span>
+                      <span class="home-card-diff">${page.difficulty}</span>
+                    </div>
+                    <h4 class="home-card-title">${page.title}</h4>
                   </div>
                 </div>
-                <div class="home-card-info">
-                  <div class="home-card-meta">
-                    <span class="home-card-cat">${page.category}</span>
-                    <span class="home-card-diff">${page.difficulty}</span>
-                  </div>
-                  <h4 class="home-card-title">${page.title}</h4>
-                </div>
-              </div>
-            `).join('')}
+              `;
+            }).join('')}
           </div>
         </section>
 

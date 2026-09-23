@@ -87,14 +87,19 @@ class App {
       this.header.updateHistoryState(canUndo, canRedo);
     });
 
+    let saveDebounceTimer: number | null = null;
     this.canvasManager.setOnFillChange((_actionCount) => {
-      // Auto-save progress
-      if (this.currentPage) {
-        StorageManager.savePageProgress(
-          this.currentPage.id,
-          this.canvasManager.history.getActions()
-        );
-      }
+      if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+      saveDebounceTimer = window.setTimeout(() => {
+        this.saveCurrentProgress();
+      }, 150);
+    });
+
+    // Auto-save on app switch, pagehide, and beforeunload
+    window.addEventListener('beforeunload', () => this.saveCurrentProgress());
+    window.addEventListener('pagehide', () => this.saveCurrentProgress());
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.saveCurrentProgress();
     });
 
     // 8. Initialize Home Page
@@ -122,7 +127,15 @@ class App {
     return this.currentView;
   }
 
+  private saveCurrentProgress(): void {
+    if (!this.currentPage) return;
+    const actions = this.canvasManager.history.getActions();
+    const dataUrl = this.canvasManager.getColorCanvasDataUrl();
+    StorageManager.savePageProgress(this.currentPage.id, actions, dataUrl);
+  }
+
   public showHome(): void {
+    this.saveCurrentProgress();
     this.currentView = 'home';
     this.studioContainer.classList.add('view-hidden');
     this.studioContainer.classList.remove('view-active');
@@ -160,16 +173,22 @@ class App {
   }
 
   private async switchPage(page: PageMetadata): Promise<void> {
+    // Flush progress of previous page if switching to another
+    if (this.currentPage && this.currentPage.id !== page.id) {
+      this.saveCurrentProgress();
+    }
+
     this.currentPage = page;
     StorageManager.setActivePageId(page.id);
     this.header.updatePageInfo(page);
 
-    // Load saved progress
-    const savedActions = StorageManager.loadPageProgress(page.id);
-    await this.canvasManager.loadPage(page, savedActions);
+    // Load saved progress (with raster dataUrl or action history)
+    const savedProgress = StorageManager.getPageProgress(page.id);
+    await this.canvasManager.loadPage(page, savedProgress);
 
-    if (savedActions.length > 0) {
-      Toast.show(`Resumed "${page.title}" (${savedActions.length} fills)`);
+    const actionCount = savedProgress ? savedProgress.actions.length : 0;
+    if (actionCount > 0 || (savedProgress && savedProgress.dataUrl)) {
+      Toast.show(`Resumed "${page.title}" (${actionCount} fills)`);
     } else {
       Toast.show(`Loaded "${page.title}"`);
     }

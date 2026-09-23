@@ -4,6 +4,7 @@ import { Toast } from './Toast.js';
 import { Logo } from './Logo.js';
 import { AdService } from '../services/adService.js';
 import { AudioManager } from '../audio/audioManager.js';
+import { StorageManager } from '../storage/storageManager.js';
 
 export class FloatingHeader {
   private element: HTMLElement;
@@ -18,6 +19,7 @@ export class FloatingHeader {
   private zoomIndicator!: HTMLElement;
   private titleEl!: HTMLElement;
   private categoryEl!: HTMLElement;
+  private currentPage?: PageMetadata;
 
   constructor(
     canvasManager: CanvasManager,
@@ -41,6 +43,7 @@ export class FloatingHeader {
   }
 
   public updatePageInfo(page: PageMetadata): void {
+    this.currentPage = page;
     if (this.titleEl) this.titleEl.textContent = page.title;
     if (this.categoryEl) this.categoryEl.textContent = page.category;
   }
@@ -201,6 +204,9 @@ export class FloatingHeader {
     this.element.querySelector('#btn-clear')?.addEventListener('click', () => {
       if (confirm('Revert all coloring on this page?')) {
         this.canvasManager.resetCanvas();
+        if (this.currentPage) {
+          StorageManager.clearPageProgress(this.currentPage.id);
+        }
         Toast.show('Canvas cleared');
       }
     });
