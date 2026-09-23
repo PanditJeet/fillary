@@ -10,6 +10,38 @@ export const PAGES: PageMetadata[] = [
     imageUrl: '/pages/puppy-playtime.jpg'
   },
   {
+    id: 'unicorn-rainbow',
+    title: 'Magical Baby Unicorn',
+    category: 'Mystical',
+    difficulty: 'Gentle',
+    description: 'An enchanted baby unicorn with a spiral horn and curly mane sitting on a rainbow amongst stars.',
+    imageUrl: '/pages/unicorn-rainbow.jpg'
+  },
+  {
+    id: 'wizard-owl',
+    title: 'Wizard Owlet',
+    category: 'Mystical',
+    difficulty: 'Gentle',
+    description: 'A cute little owl wearing a starry wizard hat with magic wand, spellbook, and potion bottles.',
+    imageUrl: '/pages/wizard-owl.jpg'
+  },
+  {
+    id: 'celestial-kitsune',
+    title: 'Celestial Moon Fox',
+    category: 'Mystical',
+    difficulty: 'Gentle',
+    description: 'A magical celestial cartoon fox with three fluffy tails curled up on a smiling crescent moon.',
+    imageUrl: '/pages/celestial-kitsune.jpg'
+  },
+  {
+    id: 'baby-dragon',
+    title: 'Starry Baby Dragon',
+    category: 'Mystical',
+    difficulty: 'Gentle',
+    description: 'A lovable baby dragon with tiny wings sitting on a soft cloud with twinkling stars and moon.',
+    imageUrl: '/pages/baby-dragon.jpg'
+  },
+  {
     id: 'kitten-yarn',
     title: 'Kitten & Butterfly',
     category: 'Animals',
@@ -48,14 +80,6 @@ export const PAGES: PageMetadata[] = [
     difficulty: 'Gentle',
     description: 'A playful baby lion cub batting happily at a butterfly under the warm African sunshine.',
     imageUrl: '/pages/lion-cub.jpg'
-  },
-  {
-    id: 'baby-dragon',
-    title: 'Starry Baby Dragon',
-    category: 'Cartoons',
-    difficulty: 'Gentle',
-    description: 'A lovable baby dragon with tiny wings sitting on a soft cloud with twinkling stars and moon.',
-    imageUrl: '/pages/baby-dragon.jpg'
   },
   {
     id: 'hamster-snack',

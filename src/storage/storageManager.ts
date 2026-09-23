@@ -60,7 +60,7 @@ export class StorageManager {
   }
 
   public static getActivePalette(): string {
-    return localStorage.getItem(STORAGE_KEYS.ACTIVE_PALETTE) || 'rainbow';
+    return localStorage.getItem(STORAGE_KEYS.ACTIVE_PALETTE) || 'rainbow-spectrum';
   }
 
   public static setActivePalette(id: string): void {

@@ -21,7 +21,7 @@ export interface FillAction {
 export interface PageMetadata {
   id: string;
   title: string;
-  category: 'Animals' | 'Cartoons' | 'Nature' | 'Mandalas' | 'Abstract' | 'Patterns';
+  category: 'Animals' | 'Cartoons' | 'Mystical' | 'Nature' | 'Mandalas' | 'Abstract' | 'Patterns';
   difficulty: 'Gentle' | 'Harmonic' | 'Intricate';
   description: string;
   svgContent?: string;
