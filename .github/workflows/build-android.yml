@@ -40,10 +40,10 @@ jobs:
           chmod +x ./gradlew
           ./gradlew bundleRelease
 
-      - name: Build Android APK (for direct phone installation)
+      - name: Build Android Debug APK (for direct phone installation)
         run: |
           cd android
-          ./gradlew assembleRelease
+          ./gradlew assembleDebug
 
       - name: Upload Android App Bundle (.aab)
         uses: actions/upload-artifact@v4
@@ -51,8 +51,8 @@ jobs:
           name: Fillary-Release-AAB
           path: android/app/build/outputs/bundle/release/app-release.aab
 
-      - name: Upload Release APK (.apk)
+      - name: Upload Installable APK (.apk)
         uses: actions/upload-artifact@v4
         with:
-          name: Fillary-Release-APK
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          name: Fillary-Installable-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
