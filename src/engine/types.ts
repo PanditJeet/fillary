@@ -21,10 +21,11 @@ export interface FillAction {
 export interface PageMetadata {
   id: string;
   title: string;
-  category: 'Mandalas' | 'Nature' | 'Animals' | 'Abstract' | 'Patterns';
+  category: 'Animals' | 'Mandalas' | 'Nature' | 'Abstract' | 'Patterns';
   difficulty: 'Gentle' | 'Harmonic' | 'Intricate';
   description: string;
-  svgContent: string;
+  svgContent?: string;
+  imageUrl?: string;
 }
 
 export interface ColorPalette {

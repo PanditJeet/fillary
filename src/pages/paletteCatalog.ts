@@ -2,88 +2,98 @@ import { ColorPalette } from '../engine/types.js';
 
 export const PALETTES: ColorPalette[] = [
   {
-    id: 'zen',
-    name: 'Zen Stone & Clay',
-    description: 'Earthy clays, tranquil sages, and warm natural alabasters',
+    id: 'rainbow',
+    name: 'Rainbow Joy',
+    description: 'Vivid, sunny, high-energy joyful bright colors for everyone',
     colors: [
-      '#E07A5F', // Warm Terracotta
-      '#F4F1DE', // Warm Sand Linen
-      '#81B29A', // Sage Meadow
-      '#3D405B', // Deep Slate Indigo
-      '#F2CC8F', // Golden Clay
-      '#B5838D', // Dusty Mauve
-      '#6B705C', // Olive Bark
-      '#A5A58D', // Lichen Taupe
-      '#DDBEA9', // Warm Shell
-      '#CB997E'  // Cinnamon Sand
+      '#FFD600', // Sunshine Yellow
+      '#FF9100', // Tangerine Punch
+      '#FF1744', // Poppy Red
+      '#F50057', // Bubblegum Pink
+      '#D500F9', // Electric Violet
+      '#651FFF', // Royal Purple
+      '#2979FF', // Ocean Blue
+      '#00B0FF', // Vivid Sky Blue
+      '#00E5FF', // Caribbean Cyan
+      '#00E676', // Bright Emerald Green
+      '#76FF03', // Vivid Lime
+      '#FFFFFF'  // Pure White
     ]
   },
   {
-    id: 'kyoto',
-    name: 'Kyoto Blossom',
-    description: 'Blushing petals, matcha mist, and rich lacquered plum',
+    id: 'cute-animals',
+    name: 'Playful Pets',
+    description: 'Golden fur, puppy caramel, strawberry tongue, and grass greens',
     colors: [
-      '#F7CAD0', // Sakura Petal
-      '#FFB3C6', // Soft Blossom
-      '#FF8FAB', // Radiant Camellia
-      '#FB6F92', // Deep Peony
-      '#84A98C', // Matcha Mist
-      '#52796F', // Deep Cedar
-      '#354F52', // Dark Slate Pine
-      '#2F3E46', // Charcoal Indigo
-      '#FFE5D9', // Porcelain Blush
-      '#9D8189'  // Wisteria Dust
+      '#F4A261', // Golden Honey Fur
+      '#E76F51', // Warm Caramel
+      '#B05B3B', // Cinnamon
+      '#5C3D2E', // Chocolate Brown
+      '#FFF3E0', // Soft Cream Fur
+      '#FF8DA1', // Rosy Cheek Pink
+      '#FF3366', // Strawberry Tongue
+      '#52B788', // Fresh Lawn Green
+      '#2D6A4F', // Deep Garden Leaf
+      '#4EA8DE', // Sunny Sky Blue
+      '#E63946', // Doghouse Cherry Red
+      '#FFD166'  // Tennis Ball Gold
     ]
   },
   {
-    id: 'nordic',
-    name: 'Nordic Forest',
-    description: 'Pine needles, alpine glaciers, and misty granite peaks',
+    id: 'candy-pop',
+    name: 'Candy Pop',
+    description: 'Sweet, bright, whimsical dessert & confectionery pastels',
     colors: [
-      '#264653', // Deep Atlantic
-      '#2A9D8F', // Glacial Pine
-      '#E9C46A', // Arctic Sunrise
-      '#F4A261', // Amber Cloud
-      '#E76F51', // Rowan Berry
-      '#457B9D', // Fjord Blue
-      '#1D3557', // Midnight Trench
-      '#A8DADC', // Ice Fog
-      '#F1FAEE', // Pure Frost
-      '#6C757D'  // Granite Rock
+      '#FF6584', // Watermelon Pop
+      '#FF7597', // Strawberry Milk
+      '#FFB5E8', // Cotton Candy
+      '#B388FF', // Sweet Lavender
+      '#8C9EFF', // Periwinkle Pop
+      '#80D8FF', // Blue Raspberry
+      '#A7FFEB', // Sweet Mint
+      '#B9F6CA', // Kiwi Lime
+      '#FFE57F', // Lemon Sorbet
+      '#FFD180', // Juicy Peach
+      '#FFAB91', // Apricot Cream
+      '#FFFFFF'  // Sugar Glaze
     ]
   },
   {
-    id: 'twilight',
-    name: 'Velvet Twilight',
-    description: 'Luminous starlight, cosmic indigo, and dusty amethyst',
+    id: 'tropical-neon',
+    name: 'Tropical Glow',
+    description: 'Dazzling neon lights, fluorescent reef fish, and electric blossoms',
     colors: [
-      '#4A4E69', // Dusk Slate
-      '#22223B', // Midnight Shadow
-      '#9A8C98', // Lavender Haze
-      '#C9ADA7', // Pale Quartz
-      '#F2E9E4', // Starlight Silk
-      '#7209B7', // Royal Amethyst
-      '#3F37C9', // Electric Indigo
-      '#4895EF', // Celestial Azure
-      '#4CC9F0', // Luminescent Sky
-      '#F72585'  // Neon Sunset
+      '#FF007F', // Electric Magenta
+      '#FF5722', // Neon Coral
+      '#FFFF00', // Laser Yellow
+      '#39FF14', // Electric Neon Lime
+      '#00FFFF', // High-Voltage Cyan
+      '#00B4D8', // Electric Lagoon
+      '#BF00FF', // Vivid Purple
+      '#FF4081', // Flamingo Pink
+      '#00E676', // Neon Mint
+      '#1A237E', // Deep Midnight Navy
+      '#FFC107', // Amber Sun
+      '#FFFFFF'  // Starlight
     ]
   },
   {
-    id: 'solstice',
-    name: 'Desert Solstice',
-    description: 'Sun-drenched canyon sands, terracotta warmth, and agave green',
+    id: 'classic-crayons',
+    name: 'Classic Brights',
+    description: 'The universally loved classic crayon box favorites',
     colors: [
-      '#D97706', // Warm Amber
-      '#B45309', // Desert Ochre
-      '#9A3412', // Canyon Rust
-      '#78350F', // Dark Umber
-      '#059669', // Desert Agave
-      '#0D9488', // Turquoise Mineral
-      '#FDE68A', // Sunlit Dunes
-      '#FCD34D', // Topaz Glow
-      '#FEF3C7', // Bleached Ivory
-      '#475569'  // Slate Shadow
+      '#E53935', // Cherry Red
+      '#FB8C00', // Orange Peel
+      '#FDD835', // Bright Sunflower
+      '#43A047', // Meadow Green
+      '#1E88E5', // Brilliant Blue
+      '#8E24AA', // Grape Purple
+      '#EC407A', // Rose Pink
+      '#00ACC1', // Teal Lagoon
+      '#6D4C41', // Cocoa Brown
+      '#78909C', // Cloud Slate
+      '#C0CA33', // Pear Chartreuse
+      '#212121'  // Ink Charcoal
     ]
   }
 ];

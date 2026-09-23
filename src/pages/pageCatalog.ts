@@ -279,6 +279,46 @@ function generateCelestialSvg(): string {
 
 export const PAGES: PageMetadata[] = [
   {
+    id: 'puppy-playtime',
+    title: 'Playful Puppy',
+    category: 'Animals',
+    difficulty: 'Gentle',
+    description: 'A cheerful, adorable puppy with big sparkling eyes, tennis ball, and cute doghouse.',
+    imageUrl: '/pages/puppy-playtime.jpg'
+  },
+  {
+    id: 'kitten-yarn',
+    title: 'Kitten & Butterfly',
+    category: 'Animals',
+    difficulty: 'Gentle',
+    description: 'An adorable fluffy kitten playing with yarn among garden blossoms and butterflies.',
+    imageUrl: '/pages/kitten-yarn.jpg'
+  },
+  {
+    id: 'baby-panda',
+    title: 'Cheerful Baby Panda',
+    category: 'Animals',
+    difficulty: 'Gentle',
+    description: 'A joyful baby panda happily holding sweet bamboo in a flowering grove.',
+    imageUrl: '/pages/baby-panda.jpg'
+  },
+  {
+    id: 'dolphin-ocean',
+    title: 'Dolphin & Sea Turtle',
+    category: 'Animals',
+    difficulty: 'Gentle',
+    description: 'A happy dolphin and cute baby sea turtle leaping through bright ocean waves.',
+    imageUrl: '/pages/dolphin-ocean.jpg'
+  },
+  {
+    id: 'origami-crane',
+    title: 'Origami Crane & Ripples',
+    category: 'Animals',
+    difficulty: 'Harmonic',
+    description: 'Clean geometric origami crane gliding gracefully over calm water lily ripples.',
+    svgContent: generateOrigamiCraneSvg()
+  },
+  {
     id: 'lotus-mandala',
     title: 'Sacred Lotus Mandala',
     category: 'Mandalas',
@@ -293,14 +333,6 @@ export const PAGES: PageMetadata[] = [
     difficulty: 'Gentle',
     description: 'A miniature curved pine bonsai framed by mountain horizons and tranquil twilight.',
     svgContent: generateBonsaiSvg()
-  },
-  {
-    id: 'origami-crane',
-    title: 'Origami Crane & Ripples',
-    category: 'Animals',
-    difficulty: 'Harmonic',
-    description: 'Clean geometric origami crane gliding gracefully over calm water lily ripples.',
-    svgContent: generateOrigamiCraneSvg()
   },
   {
     id: 'tropical-monstera',

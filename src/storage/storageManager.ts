@@ -39,11 +39,11 @@ export class StorageManager {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.RECENT_COLORS);
       if (!data) {
-        return ['#E07A5F', '#3D405B', '#81B29A', '#F2CC8F', '#F4F1DE'];
+        return ['#FFD600', '#FF1744', '#00E676', '#00B0FF', '#FF9100', '#D500F9'];
       }
       return JSON.parse(data) as string[];
     } catch {
-      return ['#E07A5F', '#3D405B', '#81B29A', '#F2CC8F', '#F4F1DE'];
+      return ['#FFD600', '#FF1744', '#00E676', '#00B0FF', '#FF9100', '#D500F9'];
     }
   }
 
@@ -60,7 +60,7 @@ export class StorageManager {
   }
 
   public static getActivePalette(): string {
-    return localStorage.getItem(STORAGE_KEYS.ACTIVE_PALETTE) || 'zen';
+    return localStorage.getItem(STORAGE_KEYS.ACTIVE_PALETTE) || 'rainbow';
   }
 
   public static setActivePalette(id: string): void {

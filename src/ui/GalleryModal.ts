@@ -45,7 +45,7 @@ export class GalleryModal {
           ${PAGES.map(page => `
             <div class="gallery-card" data-page-id="${page.id}">
               <div class="gallery-thumb-container">
-                ${page.svgContent}
+                ${page.imageUrl ? `<img src="${page.imageUrl}" alt="${page.title}" class="gallery-thumb-img" />` : (page.svgContent || '')}
               </div>
               <div class="gallery-card-info">
                 <div class="gallery-card-meta">

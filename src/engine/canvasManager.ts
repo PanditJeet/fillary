@@ -151,8 +151,12 @@ export class CanvasManager {
     // Reset color layer to pristine white
     this.initColorCanvas();
 
-    // Load line-art SVG
-    await this.renderSvgToLineArtCanvas(page.svgContent);
+    // Load line-art (either image file or SVG)
+    if (page.imageUrl) {
+      await this.renderImageFileToLineArtCanvas(page.imageUrl);
+    } else if (page.svgContent) {
+      await this.renderSvgToLineArtCanvas(page.svgContent);
+    }
 
     // Compute boundary mask
     this.computeLineArtMask();
@@ -167,6 +171,43 @@ export class CanvasManager {
     }
 
     this.fitToScreen();
+  }
+
+  private renderImageFileToLineArtCanvas(url: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      img.onload = () => {
+        this.lineArtCtx.clearRect(0, 0, this.canvasSize, this.canvasSize);
+        this.lineArtCtx.drawImage(img, 0, 0, this.canvasSize, this.canvasSize);
+
+        // Convert light/white background pixels to transparent so colors underneath show through
+        // Keep linework bold and solid
+        const imgData = this.lineArtCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
+        const d = imgData.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i];
+          const g = d[i + 1];
+          const b = d[i + 2];
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+          if (lum > 185) {
+            d[i + 3] = 0; // Pure transparent for all fillable areas
+          } else {
+            d[i] = 18;
+            d[i + 1] = 18;
+            d[i + 2] = 18;
+            d[i + 3] = 255;
+          }
+        }
+        this.lineArtCtx.putImageData(imgData, 0, 0);
+        resolve();
+      };
+
+      img.onerror = (e) => reject(e);
+      img.src = url;
+    });
   }
 
   private renderSvgToLineArtCanvas(svgString: string): Promise<void> {
