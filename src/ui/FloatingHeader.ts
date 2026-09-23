@@ -1,11 +1,13 @@
 import { CanvasManager } from '../engine/canvasManager.js';
 import { PageMetadata } from '../engine/types.js';
 import { Toast } from './Toast.js';
+import { Logo } from './Logo.js';
 
 export class FloatingHeader {
   private element: HTMLElement;
   private canvasManager: CanvasManager;
   private onOpenGallery: () => void;
+  private onGoHome: () => void;
 
   private undoBtn!: HTMLButtonElement;
   private redoBtn!: HTMLButtonElement;
@@ -13,9 +15,10 @@ export class FloatingHeader {
   private titleEl!: HTMLElement;
   private categoryEl!: HTMLElement;
 
-  constructor(canvasManager: CanvasManager, onOpenGallery: () => void) {
+  constructor(canvasManager: CanvasManager, onOpenGallery: () => void, onGoHome: () => void) {
     this.canvasManager = canvasManager;
     this.onOpenGallery = onOpenGallery;
+    this.onGoHome = onGoHome;
 
     this.element = document.createElement('header');
     this.element.className = 'floating-header';
@@ -45,11 +48,19 @@ export class FloatingHeader {
 
   private render(): void {
     this.element.innerHTML = `
-      <!-- Left Pill: Gallery Navigation & Title -->
+      <!-- Left Pill: Home, Gallery Navigation & Title -->
       <div class="header-group">
         <div class="pill-card">
-          <button class="btn-icon" id="btn-gallery" title="Open Gallery" aria-label="Open Gallery">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Return to Home Button with Logo -->
+          <button class="btn-icon btn-logo-home" id="btn-home" title="Return to Home" aria-label="Return to Home">
+            ${Logo.getMarkSvg(24)}
+          </button>
+
+          <div class="pill-separator"></div>
+
+          <!-- Open Gallery Modal Button -->
+          <button class="btn-icon" id="btn-gallery" title="Open All Pages" aria-label="Open Gallery">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="7" height="7"></rect>
               <rect x="14" y="3" width="7" height="7"></rect>
               <rect x="14" y="14" width="7" height="7"></rect>
@@ -58,8 +69,8 @@ export class FloatingHeader {
           </button>
 
           <div class="title-badge-container">
-            <span class="badge-category" id="header-category">Mandalas</span>
-            <span class="page-title-text" id="header-title">Sacred Lotus</span>
+            <span class="badge-category" id="header-category">Animals</span>
+            <span class="page-title-text" id="header-title">Playful Puppy</span>
           </div>
         </div>
       </div>
@@ -122,6 +133,12 @@ export class FloatingHeader {
   }
 
   private setupListeners(): void {
+    // Return to Home
+    this.element.querySelector('#btn-home')?.addEventListener('click', () => {
+      this.onGoHome();
+    });
+
+    // Open Gallery
     this.element.querySelector('#btn-gallery')?.addEventListener('click', () => {
       this.onOpenGallery();
     });
