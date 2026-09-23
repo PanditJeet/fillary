@@ -1,6 +1,7 @@
 import { PageMetadata } from '../engine/types.js';
+import { HUMAN_CARTOON_PAGES } from './humanCartoons.js';
 
-export const PAGES: PageMetadata[] = [
+export const ANIMAL_PAGES: PageMetadata[] = [
   {
     id: 'puppy-playtime',
     title: 'Playful Puppy',
@@ -8,38 +9,6 @@ export const PAGES: PageMetadata[] = [
     difficulty: 'Gentle',
     description: 'A cheerful, adorable puppy with big sparkling eyes, tennis ball, and cute doghouse in the garden.',
     imageUrl: '/pages/puppy-playtime.jpg'
-  },
-  {
-    id: 'unicorn-rainbow',
-    title: 'Magical Baby Unicorn',
-    category: 'Mystical',
-    difficulty: 'Gentle',
-    description: 'An enchanted baby unicorn with a spiral horn and curly mane sitting on a rainbow amongst stars.',
-    imageUrl: '/pages/unicorn-rainbow.jpg'
-  },
-  {
-    id: 'wizard-owl',
-    title: 'Wizard Owlet',
-    category: 'Mystical',
-    difficulty: 'Gentle',
-    description: 'A cute little owl wearing a starry wizard hat with magic wand, spellbook, and potion bottles.',
-    imageUrl: '/pages/wizard-owl.jpg'
-  },
-  {
-    id: 'celestial-kitsune',
-    title: 'Celestial Moon Fox',
-    category: 'Mystical',
-    difficulty: 'Gentle',
-    description: 'A magical celestial cartoon fox with three fluffy tails curled up on a smiling crescent moon.',
-    imageUrl: '/pages/celestial-kitsune.jpg'
-  },
-  {
-    id: 'baby-dragon',
-    title: 'Starry Baby Dragon',
-    category: 'Mystical',
-    difficulty: 'Gentle',
-    description: 'A lovable baby dragon with tiny wings sitting on a soft cloud with twinkling stars and moon.',
-    imageUrl: '/pages/baby-dragon.jpg'
   },
   {
     id: 'kitten-yarn',
@@ -97,6 +66,48 @@ export const PAGES: PageMetadata[] = [
     description: 'A leaping ocean dolphin and smiling baby sea turtle swimming through bubbly waves with starfish.',
     imageUrl: '/pages/dolphin-ocean.jpg'
   }
+];
+
+export const MYSTICAL_PAGES: PageMetadata[] = [
+  {
+    id: 'unicorn-rainbow',
+    title: 'Magical Baby Unicorn',
+    category: 'Mystical',
+    difficulty: 'Gentle',
+    description: 'An enchanted baby unicorn with a spiral horn and curly mane sitting on a rainbow amongst stars.',
+    imageUrl: '/pages/unicorn-rainbow.jpg'
+  },
+  {
+    id: 'wizard-owl',
+    title: 'Wizard Owlet',
+    category: 'Mystical',
+    difficulty: 'Gentle',
+    description: 'A cute little owl wearing a starry wizard hat with magic wand, spellbook, and potion bottles.',
+    imageUrl: '/pages/wizard-owl.jpg'
+  },
+  {
+    id: 'celestial-kitsune',
+    title: 'Celestial Moon Fox',
+    category: 'Mystical',
+    difficulty: 'Gentle',
+    description: 'A magical celestial cartoon fox with three fluffy tails curled up on a smiling crescent moon.',
+    imageUrl: '/pages/celestial-kitsune.jpg'
+  },
+  {
+    id: 'baby-dragon',
+    title: 'Starry Baby Dragon',
+    category: 'Mystical',
+    difficulty: 'Gentle',
+    description: 'A lovable baby dragon with tiny wings sitting on a soft cloud with twinkling stars and moon.',
+    imageUrl: '/pages/baby-dragon.jpg'
+  }
+];
+
+// All pages combined
+export const PAGES: PageMetadata[] = [
+  ...ANIMAL_PAGES,
+  ...HUMAN_CARTOON_PAGES,
+  ...MYSTICAL_PAGES
 ];
 
 export function getPageById(id: string): PageMetadata {

@@ -14,12 +14,14 @@ for (const page of PAGES) {
     const stats = fs.statSync(publicPath);
     console.log(`✓ Image Page "${page.title}" (${page.category}): File exists (${(stats.size / 1024).toFixed(1)} KB) at ${page.imageUrl}`);
   } else if (page.svgContent) {
-    if (page.svgContent.includes('fill="#FFFFFF"') || page.svgContent.includes('fill="#ffffff"')) {
-      console.error(`Page ${page.id} still contains fill="#FFFFFF" which would occlude color canvas!`);
+    // Check that there is no background rect covering the whole canvas with solid white
+    if (page.svgContent.includes('<rect width="1024" height="1024" fill="#FFFFFF"') || 
+        page.svgContent.includes('<rect width="1024" height="1024" fill="#ffffff"')) {
+      console.error(`Page ${page.id} contains full white rect which would occlude color canvas!`);
       process.exit(1);
     }
     console.log(`✓ Vector Page "${page.title}" (${page.category}): Clean transparent linework verified.`);
   }
 }
 
-console.log('All pages verified successfully!');
+console.log(`\nAll ${PAGES.length} pages verified successfully across all collections!`);

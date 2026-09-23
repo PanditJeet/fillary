@@ -1,9 +1,11 @@
-import { PAGES } from '../pages/pageCatalog.js';
+import { PAGES, ANIMAL_PAGES, MYSTICAL_PAGES } from '../pages/pageCatalog.js';
+import { HUMAN_CARTOON_PAGES } from '../pages/humanCartoons.js';
 import { PageMetadata } from '../engine/types.js';
 
 export class GalleryModal {
   private overlay: HTMLElement;
   private onSelectPage: (page: PageMetadata) => void;
+  private activeCategory: string = 'All';
 
   constructor(onSelectPage: (page: PageMetadata) => void) {
     this.onSelectPage = onSelectPage;
@@ -11,6 +13,10 @@ export class GalleryModal {
     this.overlay.className = 'modal-overlay';
     this.render();
     this.setupListeners();
+  }
+
+  public getActiveCategory(): string {
+    return this.activeCategory;
   }
 
   public getElement(): HTMLElement {
@@ -41,9 +47,17 @@ export class GalleryModal {
           </button>
         </div>
 
+        <!-- Collection Category Filter Tabs -->
+        <div class="gallery-filter-tabs">
+          <button class="gallery-filter-btn active" data-cat="All">All (${PAGES.length})</button>
+          <button class="gallery-filter-btn" data-cat="Animals">Animals (${ANIMAL_PAGES.length})</button>
+          <button class="gallery-filter-btn" data-cat="Human Cartoons">Human Cartoons (${HUMAN_CARTOON_PAGES.length})</button>
+          <button class="gallery-filter-btn" data-cat="Mystical">Mystical (${MYSTICAL_PAGES.length})</button>
+        </div>
+
         <div class="gallery-grid" id="gallery-grid-cards">
           ${PAGES.map(page => `
-            <div class="gallery-card" data-page-id="${page.id}">
+            <div class="gallery-card" data-page-id="${page.id}" data-category="${page.category}">
               <div class="gallery-thumb-container">
                 ${page.imageUrl ? `<img src="${page.imageUrl}" alt="${page.title}" class="gallery-thumb-img" />` : (page.svgContent || '')}
               </div>
@@ -56,9 +70,34 @@ export class GalleryModal {
               </div>
             </div>
           `).join('')}
+
+          <!-- Coming Soon Teaser Card -->
+          <div class="gallery-coming-soon-card">
+            <div class="coming-soon-badge">✨ Coming Soon</div>
+            <h3 class="coming-soon-title">More Pages Added Weekly</h3>
+            <p class="coming-soon-desc">We're illustrating new cute animals, fun human cartoon adventures, and magical wonders. Stay tuned for updates!</p>
+          </div>
         </div>
       </div>
     `;
+  }
+
+  private filterCards(category: string): void {
+    this.activeCategory = category;
+    const cards = this.overlay.querySelectorAll<HTMLElement>('.gallery-card');
+    cards.forEach(card => {
+      const cardCat = card.getAttribute('data-category');
+      if (category === 'All' || cardCat === category) {
+        card.style.display = 'flex';
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    const filterBtns = this.overlay.querySelectorAll('.gallery-filter-btn');
+    filterBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-cat') === category);
+    });
   }
 
   private setupListeners(): void {
@@ -70,6 +109,16 @@ export class GalleryModal {
     this.overlay.addEventListener('click', (e) => {
       if (e.target === this.overlay) {
         this.close();
+      }
+    });
+
+    // Category Filter Clicks
+    this.overlay.querySelector('.gallery-filter-tabs')?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.gallery-filter-btn');
+      if (!btn) return;
+      const cat = btn.getAttribute('data-cat');
+      if (cat) {
+        this.filterCards(cat);
       }
     });
 
