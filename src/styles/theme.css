@@ -1338,3 +1338,137 @@ html, body {
   }
 }
 
+/* Palette Lock Indicators */
+.palette-tab-btn.locked-palette {
+  opacity: 0.78;
+  border-style: dashed;
+}
+
+.palette-tab-btn.locked-palette:hover {
+  opacity: 1;
+  border-color: var(--accent-gold);
+}
+
+.palette-lock-icon {
+  font-size: 0.75rem;
+  margin-right: 4px;
+}
+
+/* Ad Simulation Modal */
+.ad-simulation-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 10, 14, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: adFadeIn 0.25s ease-out;
+}
+
+@keyframes adFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ad-simulation-overlay.fade-out {
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.ad-simulation-card {
+  width: 100%;
+  max-width: 440px;
+  background: linear-gradient(135deg, rgba(30, 35, 48, 0.95), rgba(18, 22, 30, 0.98));
+  border: 1px solid var(--border-prominent);
+  border-radius: var(--radius-xl);
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(226, 177, 104, 0.15);
+  animation: adCardPop 0.3s var(--transition-spring);
+}
+
+@keyframes adCardPop {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.ad-simulation-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-gold);
+  background: rgba(226, 177, 104, 0.12);
+  border: 1px solid rgba(226, 177, 104, 0.25);
+  padding: 5px 14px;
+  border-radius: var(--radius-full);
+  margin-bottom: 20px;
+}
+
+.ad-simulation-media {
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.ad-media-icon {
+  font-size: 2.8rem;
+  margin-bottom: 6px;
+  animation: floatEmblem 3s ease-in-out infinite alternate;
+}
+
+.ad-simulation-media h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ad-simulation-media p {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.ad-simulation-timer {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--accent-gold);
+  margin-bottom: 20px;
+  min-height: 24px;
+}
+
+.ad-simulation-btn {
+  width: 100%;
+  padding: 13px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: not-allowed;
+  transition: all 0.2s ease;
+}
+
+.ad-simulation-btn.ad-btn-active {
+  background: var(--text-primary);
+  color: #0D0F14;
+  border-color: var(--text-primary);
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.25);
+}
+
+.ad-simulation-btn.ad-btn-active:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 26px rgba(255, 255, 255, 0.35);
+}
+

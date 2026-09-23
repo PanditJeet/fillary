@@ -2,6 +2,7 @@ import { CanvasManager } from '../engine/canvasManager.js';
 import { PageMetadata } from '../engine/types.js';
 import { Toast } from './Toast.js';
 import { Logo } from './Logo.js';
+import { AdService } from '../services/adService.js';
 
 export class FloatingHeader {
   private element: HTMLElement;
@@ -183,7 +184,10 @@ export class FloatingHeader {
     });
   }
 
-  private exportArtwork(): void {
+  private async exportArtwork(): Promise<void> {
+    // Show non-intrusive interstitial ad (respects 2-minute cooldown)
+    await AdService.showInterstitial('export');
+
     const dataUrl = this.canvasManager.exportImage();
     const link = document.createElement('a');
     link.download = `Fillary-${(this.titleEl.textContent || 'art').toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.png`;

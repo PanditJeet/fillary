@@ -2,6 +2,7 @@ import { CanvasManager } from '../engine/canvasManager.js';
 import { ColorPalette } from '../engine/types.js';
 import { PALETTES, getPaletteById } from '../pages/paletteCatalog.js';
 import { StorageManager } from '../storage/storageManager.js';
+import { AdService } from '../services/adService.js';
 
 export class PaletteTray {
   private element: HTMLElement;
@@ -13,6 +14,8 @@ export class PaletteTray {
   private recentContainer!: HTMLElement;
   private tabsContainer!: HTMLElement;
   private colorInput!: HTMLInputElement;
+
+  private static readonly PREMIUM_PALETTES = ['tropical-neon', 'jewel-crystals'];
 
   constructor(canvasManager: CanvasManager) {
     this.canvasManager = canvasManager;
@@ -37,11 +40,17 @@ export class PaletteTray {
         <!-- Top Row: Palette Themes & Custom Picker -->
         <div class="palette-tabs-row">
           <div class="palette-tabs" id="palette-tabs-list">
-            ${PALETTES.map(p => `
-              <button class="palette-tab-btn ${p.id === this.activePalette.id ? 'active' : ''}" data-palette-id="${p.id}">
-                ${p.name}
-              </button>
-            `).join('')}
+            ${PALETTES.map(p => {
+              const isPremium = PaletteTray.PREMIUM_PALETTES.includes(p.id);
+              const isUnlocked = !isPremium || AdService.isPaletteUnlocked(p.id);
+              const lockBadge = !isUnlocked ? '<span class="palette-lock-icon">🔒</span>' : '';
+              return `
+                <button class="palette-tab-btn ${p.id === this.activePalette.id ? 'active' : ''} ${!isUnlocked ? 'locked-palette' : ''}" data-palette-id="${p.id}">
+                  ${lockBadge}
+                  <span>${p.name}</span>
+                </button>
+              `;
+            }).join('')}
           </div>
 
           <div class="color-picker-wrapper">
@@ -136,6 +145,22 @@ export class PaletteTray {
     this.renderRecentColors();
   }
 
+  public selectPalette(paletteId: string): void {
+    this.activePalette = getPaletteById(paletteId);
+    StorageManager.setActivePalette(paletteId);
+
+    // Update tab styles
+    this.tabsContainer.querySelectorAll('.palette-tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-palette-id') === paletteId);
+    });
+
+    this.renderSwatches();
+    // Default to the first color in newly selected palette
+    if (this.activePalette.colors.length > 0) {
+      this.selectColor(this.activePalette.colors[0]);
+    }
+  }
+
   private rgbToHex(rgbStr: string): string {
     if (rgbStr.startsWith('#')) return rgbStr;
     const match = rgbStr.match(/\d+/g);
@@ -145,22 +170,29 @@ export class PaletteTray {
   }
 
   private setupListeners(): void {
-    // Tab switching
-    this.tabsContainer.addEventListener('click', (e) => {
+    // Tab switching with Rewarded Ad unlock for premium palettes
+    this.tabsContainer.addEventListener('click', async (e) => {
       const target = (e.target as HTMLElement).closest('.palette-tab-btn');
       if (!target) return;
 
       const paletteId = target.getAttribute('data-palette-id');
       if (paletteId) {
-        this.activePalette = getPaletteById(paletteId);
-        StorageManager.setActivePalette(paletteId);
+        const isPremium = PaletteTray.PREMIUM_PALETTES.includes(paletteId);
+        if (isPremium && !AdService.isPaletteUnlocked(paletteId)) {
+          const palette = getPaletteById(paletteId);
+          const confirmUnlock = confirm(`Watch a quick sponsored video to unlock the "${palette.name}" palette?`);
+          if (confirmUnlock) {
+            const earned = await AdService.showRewarded(`Unlock ${palette.name}`);
+            if (earned) {
+              AdService.unlockPalette(paletteId);
+              this.render(); // Re-render tabs with unlocked badge
+              this.selectPalette(paletteId);
+            }
+          }
+          return;
+        }
 
-        // Update tab styles
-        this.tabsContainer.querySelectorAll('.palette-tab-btn').forEach(btn => {
-          btn.classList.toggle('active', btn === target);
-        });
-
-        this.renderSwatches();
+        this.selectPalette(paletteId);
       }
     });
 

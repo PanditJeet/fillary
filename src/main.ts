@@ -8,6 +8,7 @@ import { Toast } from './ui/Toast.js';
 import { PAGES, getPageById } from './pages/pageCatalog.js';
 import { StorageManager } from './storage/storageManager.js';
 import { PageMetadata } from './engine/types.js';
+import { AdService } from './services/adService.js';
 
 type ViewMode = 'home' | 'studio';
 
@@ -29,6 +30,7 @@ class App {
   private async init(): Promise<void> {
     const appEl = document.getElementById('app')!;
     Toast.init();
+    await AdService.initialize();
 
     // 1. Studio View Wrapper
     this.studioContainer = document.createElement('div');
