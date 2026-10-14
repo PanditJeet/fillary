@@ -236,10 +236,47 @@ export class FloatingHeader {
     await AdService.showInterstitial('export');
 
     const dataUrl = this.canvasManager.exportImage();
-    const link = document.createElement('a');
-    link.download = `Fillary-${(this.titleEl.textContent || 'art').toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.png`;
-    link.href = dataUrl;
-    link.click();
-    Toast.show('High-res artwork exported');
+    const title = this.titleEl?.textContent || 'art';
+    const fileName = `Fillary-${title.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.png`;
+
+    // Attempt Native Web Share API first (supported by mobile Chrome/Android, Safari/iOS)
+    if ('share' in navigator && typeof navigator.share === 'function') {
+      try {
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], fileName, { type: 'image/png' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `Fillary — ${title}`,
+            text: 'Colored with Fillary Mindful Coloring'
+          });
+          Toast.show('Artwork shared successfully! ✨');
+          return;
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return; // User cancelled share sheet
+        }
+        console.warn('[FloatingHeader] Web Share failed, falling back to download:', err);
+      }
+    }
+
+    // Fallback: Standard browser download link
+    try {
+      const link = document.createElement('a');
+      link.download = fileName;
+      link.href = dataUrl;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => link.remove(), 100);
+      Toast.show('High-res artwork exported');
+    } catch (e) {
+      console.error('[FloatingHeader] Export download error:', e);
+      window.open(dataUrl, '_blank');
+      Toast.show('Artwork opened in new tab');
+    }
   }
 }

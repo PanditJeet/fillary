@@ -1,10 +1,14 @@
 import { FillAction } from './types.js';
 
+interface HistorySnapshot {
+  imageData: ImageData;
+  action?: FillAction;
+}
+
 export class HistoryManager {
-  private undoStack: ImageData[] = [];
-  private redoStack: ImageData[] = [];
+  private undoStack: HistorySnapshot[] = [];
+  private redoStack: HistorySnapshot[] = [];
   private actions: FillAction[] = [];
-  private redoActions: FillAction[] = [];
   private maxHistory: number = 25;
   private onStateChangeCallback?: (canUndo: boolean, canRedo: boolean) => void;
 
@@ -28,7 +32,7 @@ export class HistoryManager {
       snapshot.height
     );
 
-    this.undoStack.push(copy);
+    this.undoStack.push({ imageData: copy, action });
     if (this.undoStack.length > this.maxHistory) {
       this.undoStack.shift();
     }
@@ -38,56 +42,54 @@ export class HistoryManager {
     }
 
     this.redoStack = [];
-    this.redoActions = [];
     this.notify();
   }
 
   public undo(currentImageData: ImageData): ImageData | null {
     if (this.undoStack.length === 0) return null;
 
-    // Save current state to redo
+    const previousEntry = this.undoStack.pop()!;
+
+    // Save current state and the action being undone to redoStack
     const currentCopy = new ImageData(
       new Uint8ClampedArray(currentImageData.data),
       currentImageData.width,
       currentImageData.height
     );
-    this.redoStack.push(currentCopy);
+    this.redoStack.push({ imageData: currentCopy, action: previousEntry.action });
 
-    const previousState = this.undoStack.pop()!;
-    if (this.actions.length > 0) {
-      const poppedAction = this.actions.pop()!;
-      this.redoActions.push(poppedAction);
+    if (previousEntry.action && this.actions.length > 0) {
+      this.actions.pop();
     }
 
     this.notify();
-    return previousState;
+    return previousEntry.imageData;
   }
 
   public redo(currentImageData: ImageData): ImageData | null {
     if (this.redoStack.length === 0) return null;
 
+    const nextEntry = this.redoStack.pop()!;
+
     const currentCopy = new ImageData(
       new Uint8ClampedArray(currentImageData.data),
       currentImageData.width,
       currentImageData.height
     );
-    this.undoStack.push(currentCopy);
+    this.undoStack.push({ imageData: currentCopy, action: nextEntry.action });
 
-    if (this.redoActions.length > 0) {
-      const restoredAction = this.redoActions.pop()!;
-      this.actions.push(restoredAction);
+    if (nextEntry.action) {
+      this.actions.push(nextEntry.action);
     }
 
-    const nextState = this.redoStack.pop()!;
     this.notify();
-    return nextState;
+    return nextEntry.imageData;
   }
 
   public clear(): void {
     this.undoStack = [];
     this.redoStack = [];
     this.actions = [];
-    this.redoActions = [];
     this.notify();
   }
 
@@ -97,7 +99,7 @@ export class HistoryManager {
 
   public setActions(actions: FillAction[]): void {
     this.actions = [...actions];
-    this.redoActions = [];
+    this.redoStack = [];
     this.notify();
   }
 

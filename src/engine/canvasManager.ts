@@ -19,6 +19,8 @@ export class CanvasManager {
 
   private transform: ViewportTransform = { scale: 1, offsetX: 0, offsetY: 0 };
   private dragStart: Point = { x: 0, y: 0 };
+  private lastClientWidth = 0;
+  private lastClientHeight = 0;
 
   // Touch tracking for pinch-to-zoom
   private activeTouchPointers: Map<number, Point> = new Map();
@@ -52,16 +54,17 @@ export class CanvasManager {
     this.initColorCanvas();
     this.setupEventListeners();
     this.handleResize();
-    window.addEventListener('resize', () => {
-      this.handleResize();
-      this.fitToScreen();
-    });
 
-    window.addEventListener('orientationchange', () => {
-      setTimeout(() => {
-        this.handleResize();
+    const onResizeHandler = () => {
+      const changed = this.handleResize();
+      if (changed) {
         this.fitToScreen();
-      }, 100);
+      }
+    };
+
+    window.addEventListener('resize', onResizeHandler);
+    window.addEventListener('orientationchange', () => {
+      setTimeout(onResizeHandler, 100);
     });
 
     // Automatically observe parent resize / visibility changes
@@ -69,8 +72,7 @@ export class CanvasManager {
       const ro = new ResizeObserver((entries) => {
         for (const entry of entries) {
           if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-            this.handleResize();
-            this.fitToScreen();
+            onResizeHandler();
           }
         }
       });
@@ -103,27 +105,48 @@ export class CanvasManager {
     return this.colorCanvas.toDataURL('image/png');
   }
 
+  public getThumbnailDataUrl(maxDim = 256): string {
+    const thumbCanvas = document.createElement('canvas');
+    thumbCanvas.width = maxDim;
+    thumbCanvas.height = maxDim;
+    const ctx = thumbCanvas.getContext('2d');
+    if (!ctx) return '';
+    ctx.drawImage(this.colorCanvas, 0, 0, maxDim, maxDim);
+    return thumbCanvas.toDataURL('image/jpeg', 0.82);
+  }
+
   public getHasFills(): boolean {
     return this.history.getActions().length > 0;
   }
 
-  public handleResize(): void {
+  public handleResize(): boolean {
     const parent = this.displayCanvas.parentElement;
-    if (!parent) return;
+    if (!parent) return false;
 
     const width = parent.clientWidth;
     const height = parent.clientHeight;
-    if (width <= 0 || height <= 0) return;
+    if (width <= 0 || height <= 0) return false;
+
+    if (Math.abs(width - this.lastClientWidth) < 2 && Math.abs(height - this.lastClientHeight) < 2) {
+      return false; // No significant dimension change
+    }
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const targetW = Math.round(width * dpr);
+    const targetH = Math.round(height * dpr);
 
-    this.displayCanvas.width = width * dpr;
-    this.displayCanvas.height = height * dpr;
-    this.displayCanvas.style.width = `${width}px`;
-    this.displayCanvas.style.height = `${height}px`;
+    this.lastClientWidth = width;
+    this.lastClientHeight = height;
 
-    this.displayCtx.scale(dpr, dpr);
+    if (this.displayCanvas.width !== targetW || this.displayCanvas.height !== targetH) {
+      this.displayCanvas.width = targetW;
+      this.displayCanvas.height = targetH;
+      this.displayCanvas.style.width = `${width}px`;
+      this.displayCanvas.style.height = `${height}px`;
+    }
+
     this.render();
+    return true;
   }
 
   /**
@@ -246,19 +269,6 @@ export class CanvasManager {
           scanlineFloodFill(colorImgData, this.lineArtMask, act.x, act.y, act.color);
         }
         this.colorCtx.putImageData(colorImgData, 0, 0);
-
-        // If raster dataUrl is present, overlay it to guarantee exact pixel restoration
-        if (progress && progress.dataUrl) {
-          await new Promise<void>((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-              this.colorCtx.drawImage(img, 0, 0, this.canvasSize, this.canvasSize);
-              resolve();
-            };
-            img.onerror = () => resolve();
-            img.src = progress.dataUrl!;
-          });
-        }
       } else if (progress && progress.dataUrl) {
         // Only raster dataUrl saved (no actions array):
         // Save initial white state as base snapshot so user can undo back to clean white!
@@ -614,6 +624,7 @@ export class CanvasManager {
     // Touch events for mobile/tablet (pinch-to-zoom + pan + tap)
     let touchStartPos = { x: 0, y: 0 };
     let isTouchPanning = false;
+    let wasMultiTouch = false;
 
     this.displayCanvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
@@ -627,7 +638,10 @@ export class CanvasManager {
         touchStartPos = { x: t.clientX, y: t.clientY };
         this.dragStart = { x: t.clientX, y: t.clientY };
         isTouchPanning = false;
-      } else if (e.touches.length === 2) {
+        wasMultiTouch = false;
+      } else if (e.touches.length >= 2) {
+        wasMultiTouch = true;
+        isTouchPanning = true;
         const t1 = e.touches[0];
         const t2 = e.touches[1];
         this.initialPinchDistance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
@@ -636,6 +650,7 @@ export class CanvasManager {
           x: (t1.clientX + t2.clientX) / 2,
           y: (t1.clientY + t2.clientY) / 2
         };
+        this.dragStart = { x: this.pinchCenter.x, y: this.pinchCenter.y };
       }
     }, { passive: false });
 
@@ -648,27 +663,59 @@ export class CanvasManager {
 
       if (e.touches.length === 1) {
         const t = e.touches[0];
-        const totalDist = Math.hypot(t.clientX - touchStartPos.x, t.clientY - touchStartPos.y);
-        if (!isTouchPanning && totalDist > 10) {
-          isTouchPanning = true;
-        }
-
-        if (isTouchPanning) {
+        if (wasMultiTouch) {
+          // Continuing pan after lifting one of the two fingers
           const dx = t.clientX - this.dragStart.x;
           const dy = t.clientY - this.dragStart.y;
           this.transform.offsetX += dx;
           this.transform.offsetY += dy;
           this.dragStart = { x: t.clientX, y: t.clientY };
           this.render();
+        } else {
+          const totalDist = Math.hypot(t.clientX - touchStartPos.x, t.clientY - touchStartPos.y);
+          if (!isTouchPanning && totalDist > 10) {
+            isTouchPanning = true;
+          }
+
+          if (isTouchPanning) {
+            const dx = t.clientX - this.dragStart.x;
+            const dy = t.clientY - this.dragStart.y;
+            this.transform.offsetX += dx;
+            this.transform.offsetY += dy;
+            this.dragStart = { x: t.clientX, y: t.clientY };
+            this.render();
+          }
         }
-      } else if (e.touches.length === 2) {
+      } else if (e.touches.length >= 2) {
+        wasMultiTouch = true;
+        isTouchPanning = true;
+
         const t1 = e.touches[0];
         const t2 = e.touches[1];
+        const currentCenter = {
+          x: (t1.clientX + t2.clientX) / 2,
+          y: (t1.clientY + t2.clientY) / 2
+        };
+
+        // Two-finger pan
+        const dx = currentCenter.x - this.dragStart.x;
+        const dy = currentCenter.y - this.dragStart.y;
+        this.transform.offsetX += dx;
+        this.transform.offsetY += dy;
+        this.dragStart = currentCenter;
+
+        // Two-finger pinch zoom
         const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-        if (this.initialPinchDistance > 0) {
+        if (this.initialPinchDistance > 0 && currentDist > 0) {
           const factor = currentDist / this.initialPinchDistance;
           const rect = this.displayCanvas.getBoundingClientRect();
-          this.zoomToPoint(factor * (this.initialPinchScale / this.transform.scale), this.pinchCenter.x - rect.left, this.pinchCenter.y - rect.top);
+          this.zoomToPoint(
+            factor * (this.initialPinchScale / this.transform.scale),
+            currentCenter.x - rect.left,
+            currentCenter.y - rect.top
+          );
+        } else {
+          this.render();
         }
       }
     }, { passive: false });
@@ -679,11 +726,27 @@ export class CanvasManager {
         this.activeTouchPointers.delete(touch.identifier);
       }
 
-      if (e.touches.length === 0 && !isTouchPanning) {
-        const touch = e.changedTouches[0];
-        const rect = this.displayCanvas.getBoundingClientRect();
-        this.fillAtScreenPoint(touch.clientX - rect.left, touch.clientY - rect.top);
+      if (e.touches.length === 1) {
+        // One finger remains down: keep multi-touch flag so lifting it won't trigger a fill
+        const remaining = e.touches[0];
+        this.dragStart = { x: remaining.clientX, y: remaining.clientY };
+      } else if (e.touches.length === 0) {
+        if (!isTouchPanning && !wasMultiTouch) {
+          const touch = e.changedTouches[0];
+          const rect = this.displayCanvas.getBoundingClientRect();
+          this.fillAtScreenPoint(touch.clientX - rect.left, touch.clientY - rect.top);
+        }
+        isTouchPanning = false;
+        wasMultiTouch = false;
+        this.initialPinchDistance = 0;
       }
+    });
+
+    this.displayCanvas.addEventListener('touchcancel', () => {
+      this.activeTouchPointers.clear();
+      isTouchPanning = false;
+      wasMultiTouch = false;
+      this.initialPinchDistance = 0;
     });
   }
 }

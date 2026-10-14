@@ -92,7 +92,7 @@ class App {
       if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
       saveDebounceTimer = window.setTimeout(() => {
         this.saveCurrentProgress();
-      }, 150);
+      }, 250);
     });
 
     // Auto-save on app switch, pagehide, and beforeunload
@@ -130,8 +130,8 @@ class App {
   private saveCurrentProgress(): void {
     if (!this.currentPage) return;
     const actions = this.canvasManager.history.getActions();
-    const dataUrl = this.canvasManager.getColorCanvasDataUrl();
-    StorageManager.savePageProgress(this.currentPage.id, actions, dataUrl);
+    const thumbUrl = this.canvasManager.getThumbnailDataUrl(256);
+    StorageManager.savePageProgress(this.currentPage.id, actions, thumbUrl);
   }
 
   public showHome(): void {

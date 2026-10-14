@@ -34,6 +34,7 @@
 html, body {
   width: 100%;
   height: 100%;
+  height: 100dvh;
   overflow: hidden;
   background-color: var(--bg-app);
   font-family: var(--font-sans);
@@ -43,6 +44,7 @@ html, body {
 #app {
   width: 100%;
   height: 100%;
+  height: 100dvh;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -404,12 +406,14 @@ html, body {
   align-items: center;
   padding: 30px;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 .modal-overlay.open {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
 }
 
@@ -691,11 +695,13 @@ html, body {
 .studio-container {
   width: 100%;
   height: 100%;
+  height: 100dvh;
   position: absolute;
   top: 0;
   left: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
@@ -781,6 +787,7 @@ html, body {
   left: 0;
   width: 100%;
   height: 100%;
+  height: 100dvh;
   background: radial-gradient(circle at 50% 12%, rgba(226, 177, 104, 0.08) 0%, transparent 55%), #0D0F14;
   overflow: hidden;
   display: flex;
@@ -1552,16 +1559,18 @@ html, body {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 
 .audio-modal-overlay.modal-hidden {
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
 }
 
 .audio-modal-overlay.modal-active {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
 }
 

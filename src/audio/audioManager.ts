@@ -20,6 +20,7 @@ export class AudioManager {
   // Active synthesizers
   private static activeNodes: Array<{ stop: () => void }> = [];
   private static chimesTimer: number | null = null;
+  private static stopFadeTimer: number | null = null;
   private static isInitialized = false;
 
   public static initialize(): void {
@@ -39,22 +40,27 @@ export class AudioManager {
     this.isInitialized = true;
 
     // Unlock AudioContext on first user interaction (browser policy)
-    const unlockAudio = () => {
-      this.ensureContext();
-      if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume();
+    const unlockAudio = async () => {
+      try {
+        const ctx = this.ensureContext();
+        if (ctx.state === 'suspended') {
+          await ctx.resume();
+        }
+        if (this.isMusicPlaying && this.activeNodes.length === 0) {
+          this.startSoundscape(this.activeTrack);
+        }
+      } catch (err) {
+        console.warn('[AudioManager] Audio unlock error:', err);
+      } finally {
+        ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => {
+          window.removeEventListener(evt, unlockAudio);
+        });
       }
-      if (this.isMusicPlaying && this.activeNodes.length === 0) {
-        this.startSoundscape(this.activeTrack);
-      }
-      window.removeEventListener('click', unlockAudio);
-      window.removeEventListener('touchstart', unlockAudio);
-      window.removeEventListener('keydown', unlockAudio);
     };
 
-    window.addEventListener('click', unlockAudio, { once: true });
-    window.addEventListener('touchstart', unlockAudio, { once: true });
-    window.addEventListener('keydown', unlockAudio, { once: true });
+    ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => {
+      window.addEventListener(evt, unlockAudio, { passive: true });
+    });
   }
 
   private static ensureContext(): AudioContext {
@@ -85,16 +91,29 @@ export class AudioManager {
     this.isMusicPlaying = !this.isMusicPlaying;
     localStorage.setItem('fillary_audio_music', String(this.isMusicPlaying));
 
+    if (this.stopFadeTimer) {
+      window.clearTimeout(this.stopFadeTimer);
+      this.stopFadeTimer = null;
+    }
+
     if (this.musicGain && this.ctx) {
+      this.musicGain.gain.cancelScheduledValues(this.ctx.currentTime);
       if (this.isMusicPlaying) {
-        if (this.ctx.state === 'suspended') this.ctx.resume();
-        this.musicGain.gain.setTargetAtTime(1, this.ctx.currentTime, 0.4);
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume().catch(() => {});
+        }
+        this.musicGain.gain.setTargetAtTime(1, this.ctx.currentTime, 0.3);
         if (this.activeNodes.length === 0) {
           this.startSoundscape(this.activeTrack);
         }
       } else {
-        this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.4);
-        setTimeout(() => this.stopSoundscape(), 500);
+        this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.3);
+        this.stopFadeTimer = window.setTimeout(() => {
+          if (!this.isMusicPlaying) {
+            this.stopSoundscape();
+          }
+          this.stopFadeTimer = null;
+        }, 400);
       }
     }
 
@@ -122,6 +141,11 @@ export class AudioManager {
   }
 
   public static setTrack(track: SoundscapeType): void {
+    if (this.stopFadeTimer) {
+      window.clearTimeout(this.stopFadeTimer);
+      this.stopFadeTimer = null;
+    }
+
     if (this.activeTrack === track && this.activeNodes.length > 0) return;
     this.activeTrack = track;
     localStorage.setItem('fillary_audio_track', track);
@@ -140,7 +164,8 @@ export class AudioManager {
     this.volume = Math.max(0, Math.min(1, vol));
     localStorage.setItem('fillary_audio_volume', String(this.volume));
     if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.1);
+      this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.masterGain.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.05);
     }
   }
 
@@ -195,6 +220,10 @@ export class AudioManager {
   }
 
   private static stopSoundscape(): void {
+    if (this.stopFadeTimer) {
+      window.clearTimeout(this.stopFadeTimer);
+      this.stopFadeTimer = null;
+    }
     if (this.chimesTimer) {
       clearInterval(this.chimesTimer);
       this.chimesTimer = null;

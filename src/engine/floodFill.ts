@@ -102,7 +102,11 @@ export function scanlineFloodFill(
   const targetX = validPoint.x;
   const targetY = validPoint.y;
 
-  const color32 = new Uint32Array(colorImageData.data.buffer);
+  const color32 = new Uint32Array(
+    colorImageData.data.buffer,
+    colorImageData.data.byteOffset,
+    colorImageData.data.byteLength >> 2
+  );
   const startIndex = targetY * width + targetX;
 
   const targetColor = color32[startIndex];

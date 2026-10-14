@@ -92,9 +92,12 @@ export class PaletteTray {
 
   private renderSwatches(): void {
     this.swatchesContainer.innerHTML = '';
+    const activeHex = this.normalizeHex(this.currentColor);
+
     this.activePalette.colors.forEach(color => {
       const btn = document.createElement('button');
-      btn.className = `color-swatch ${color.toUpperCase() === this.currentColor.toUpperCase() ? 'active' : ''}`;
+      const isCurrent = this.normalizeHex(color) === activeHex;
+      btn.className = `color-swatch ${isCurrent ? 'active' : ''}`;
       btn.style.backgroundColor = color;
       btn.title = color;
 
@@ -109,10 +112,12 @@ export class PaletteTray {
   private renderRecentColors(): void {
     const recent = StorageManager.getRecentColors();
     this.recentContainer.innerHTML = '';
+    const activeHex = this.normalizeHex(this.currentColor);
 
     recent.slice(0, 7).forEach(color => {
       const chip = document.createElement('button');
-      chip.className = 'recent-swatch';
+      const isCurrent = this.normalizeHex(color) === activeHex;
+      chip.className = `recent-swatch ${isCurrent ? 'active' : ''}`;
       chip.style.backgroundColor = color;
       chip.title = color;
 
@@ -125,17 +130,18 @@ export class PaletteTray {
   }
 
   public selectColor(hex: string): void {
-    this.currentColor = hex;
-    this.canvasManager.setCurrentColor(hex);
-    this.colorInput.value = hex;
+    const normalized = this.normalizeHex(hex);
+    this.currentColor = normalized;
+    this.canvasManager.setCurrentColor(normalized);
+    this.colorInput.value = normalized;
 
-    StorageManager.addRecentColor(hex);
+    StorageManager.addRecentColor(normalized);
 
     // Update active UI classes
     const swatches = this.swatchesContainer.querySelectorAll('.color-swatch');
     swatches.forEach(s => {
       const el = s as HTMLElement;
-      if (this.rgbToHex(el.style.backgroundColor).toUpperCase() === hex.toUpperCase()) {
+      if (this.normalizeHex(el.style.backgroundColor) === normalized) {
         el.classList.add('active');
       } else {
         el.classList.remove('active');
@@ -161,10 +167,21 @@ export class PaletteTray {
     }
   }
 
-  private rgbToHex(rgbStr: string): string {
-    if (rgbStr.startsWith('#')) return rgbStr;
-    const match = rgbStr.match(/\d+/g);
-    if (!match || match.length < 3) return rgbStr;
+  private normalizeHex(colorStr: string): string {
+    if (!colorStr) return '';
+    if (colorStr.startsWith('#')) {
+      let hex = colorStr.slice(1);
+      if (hex.length === 3) {
+        hex = hex.split('').map(c => c + c).join('');
+      } else if (hex.length === 4) {
+        hex = hex.slice(0, 3).split('').map(c => c + c).join('');
+      } else if (hex.length >= 6) {
+        hex = hex.slice(0, 6);
+      }
+      return `#${hex.toUpperCase()}`;
+    }
+    const match = colorStr.match(/\d+/g);
+    if (!match || match.length < 3) return colorStr.toUpperCase();
     const [r, g, b] = match.map(Number);
     return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`.toUpperCase();
   }
