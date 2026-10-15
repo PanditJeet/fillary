@@ -88,6 +88,8 @@ class MockAudioContext {
   removeEventListener: () => {},
   setTimeout: setTimeout.bind(global),
   clearTimeout: clearTimeout.bind(global),
+  setInterval: setInterval.bind(global),
+  clearInterval: clearInterval.bind(global),
   AudioContext: MockAudioContext
 };
 

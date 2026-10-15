@@ -95,16 +95,6 @@ export class AudioModal {
 
         <!-- Track Selection Cards -->
         <div class="audio-tracks-grid ${!isPlaying ? 'disabled-section' : ''}">
-
-          <div class="audio-track-card ${currentTrack === 'rain' ? 'active' : ''}" data-track="rain">
-            <div class="track-icon">🌧️</div>
-            <div class="track-info">
-              <div class="track-name">Cozy Rain</div>
-              <div class="track-meta">Soft Pink-Noise Window Rain</div>
-            </div>
-            ${currentTrack === 'rain' && isPlaying ? '<span class="audio-wave-anim"><span></span><span></span><span></span></span>' : ''}
-          </div>
-
           <div class="audio-track-card ${currentTrack === 'chimes' ? 'active' : ''}" data-track="chimes">
             <div class="track-icon">✨</div>
             <div class="track-info">
