@@ -303,7 +303,9 @@ export class CanvasManager {
   private renderImageFileToLineArtCanvas(url: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.crossOrigin = 'anonymous';
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        img.crossOrigin = 'anonymous';
+      }
 
       img.onload = () => {
         this.lineArtCtx.clearRect(0, 0, this.canvasSize, this.canvasSize);

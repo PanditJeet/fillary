@@ -4,6 +4,8 @@
  * 0 MB download, works completely offline, infinite non-repeating relaxation.
  */
 
+import { StorageManager } from '../storage/storageManager.js';
+
 export type SoundscapeType = 'zen' | 'rain' | 'chimes';
 
 export class AudioManager {
@@ -27,10 +29,10 @@ export class AudioManager {
     if (this.isInitialized) return;
 
     // Load saved preferences
-    const savedMusic = localStorage.getItem('fillary_audio_music');
-    const savedSfx = localStorage.getItem('fillary_audio_sfx');
-    const savedVol = localStorage.getItem('fillary_audio_volume');
-    const savedTrack = localStorage.getItem('fillary_audio_track') as SoundscapeType;
+    const savedMusic = StorageManager.getItem('fillary_audio_music');
+    const savedSfx = StorageManager.getItem('fillary_audio_sfx');
+    const savedVol = StorageManager.getItem('fillary_audio_volume');
+    const savedTrack = StorageManager.getItem('fillary_audio_track') as SoundscapeType;
 
     if (savedMusic !== null) this.isMusicPlaying = savedMusic === 'true';
     if (savedSfx !== null) this.isSfxEnabled = savedSfx === 'true';
@@ -89,7 +91,7 @@ export class AudioManager {
   public static toggleMusic(): boolean {
     this.ensureContext();
     this.isMusicPlaying = !this.isMusicPlaying;
-    localStorage.setItem('fillary_audio_music', String(this.isMusicPlaying));
+    StorageManager.setItem('fillary_audio_music', String(this.isMusicPlaying));
 
     if (this.stopFadeTimer) {
       window.clearTimeout(this.stopFadeTimer);
@@ -130,7 +132,7 @@ export class AudioManager {
 
   public static setSfxEnabled(enabled: boolean): void {
     this.isSfxEnabled = enabled;
-    localStorage.setItem('fillary_audio_sfx', String(enabled));
+    StorageManager.setItem('fillary_audio_sfx', String(enabled));
     if (this.sfxGain && this.ctx) {
       this.sfxGain.gain.setValueAtTime(enabled ? 1 : 0, this.ctx.currentTime);
     }
@@ -148,7 +150,7 @@ export class AudioManager {
 
     if (this.activeTrack === track && this.activeNodes.length > 0) return;
     this.activeTrack = track;
-    localStorage.setItem('fillary_audio_track', track);
+    StorageManager.setItem('fillary_audio_track', track);
 
     if (this.isMusicPlaying) {
       this.stopSoundscape();
@@ -162,7 +164,7 @@ export class AudioManager {
 
   public static setVolume(vol: number): void {
     this.volume = Math.max(0, Math.min(1, vol));
-    localStorage.setItem('fillary_audio_volume', String(this.volume));
+    StorageManager.setItem('fillary_audio_volume', String(this.volume));
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
       this.masterGain.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.05);

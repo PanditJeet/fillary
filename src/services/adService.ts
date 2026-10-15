@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { AdMob, RewardAdPluginEvents, AdMobRewardItem } from '@capacitor-community/admob';
 import { Toast } from '../ui/Toast.js';
+import { StorageManager } from '../storage/storageManager.js';
 
 /**
  * Google AdMob Test Ad Unit IDs (Official Google Test IDs)
@@ -126,7 +127,7 @@ export class AdService {
    * Checks if a palette is unlocked.
    */
   public static isPaletteUnlocked(paletteId: string): boolean {
-    const unlocked = localStorage.getItem(`fillary_unlocked_palette_${paletteId}`);
+    const unlocked = StorageManager.getItem(`fillary_unlocked_palette_${paletteId}`);
     return unlocked === 'true';
   }
 
@@ -134,7 +135,7 @@ export class AdService {
    * Unlocks a palette permanently or for the session.
    */
   public static unlockPalette(paletteId: string): void {
-    localStorage.setItem(`fillary_unlocked_palette_${paletteId}`, 'true');
+    StorageManager.setItem(`fillary_unlocked_palette_${paletteId}`, 'true');
     Toast.show('Palette unlocked successfully! 🎨');
   }
 

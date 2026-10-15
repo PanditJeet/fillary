@@ -11,6 +11,7 @@ import { PageMetadata } from './engine/types.js';
 import { AdService } from './services/adService.js';
 import { AudioManager } from './audio/audioManager.js';
 import { AudioModal } from './ui/AudioModal.js';
+import { App as CapApp } from '@capacitor/app';
 
 type ViewMode = 'home' | 'studio';
 
@@ -87,15 +88,35 @@ class App {
       this.header.updateHistoryState(canUndo, canRedo);
     });
 
-    let saveDebounceTimer: number | null = null;
     this.canvasManager.setOnFillChange((_actionCount) => {
-      if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
-      saveDebounceTimer = window.setTimeout(() => {
-        this.saveCurrentProgress();
-      }, 250);
+      // Auto-save immediately upon fill so progress is never lost even if user abruptly leaves
+      this.saveCurrentProgress();
     });
 
-    // Auto-save on app switch, pagehide, and beforeunload
+    // Native Capacitor App Lifecycle Listeners (Android APK)
+    if (typeof window !== 'undefined') {
+      try {
+        CapApp.addListener('appStateChange', (state) => {
+          if (!state.isActive) {
+            this.saveCurrentProgress();
+          }
+        }).catch(() => {});
+
+        CapApp.addListener('pause', () => {
+          this.saveCurrentProgress();
+        }).catch(() => {});
+
+        CapApp.addListener('backButton', () => {
+          if (this.currentView === 'studio') {
+            this.showHome();
+          } else {
+            CapApp.exitApp();
+          }
+        }).catch(() => {});
+      } catch (_) {}
+    }
+
+    // Standard Web Lifecycle Listeners (browser / desktop fallback)
     window.addEventListener('beforeunload', () => this.saveCurrentProgress());
     window.addEventListener('pagehide', () => this.saveCurrentProgress());
     document.addEventListener('visibilitychange', () => {
@@ -203,11 +224,14 @@ class App {
   }
 }
 
-// Start application once DOM is ready
-if (document.readyState === 'loading') {
-  window.addEventListener('DOMContentLoaded', () => {
-    new App();
-  });
-} else {
+// Bootstrap application once DOM and persistent storage are ready
+async function bootstrap() {
+  await StorageManager.init();
   new App();
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', bootstrap);
+} else {
+  bootstrap();
 }
