@@ -95,14 +95,6 @@ export class AudioModal {
 
         <!-- Track Selection Cards -->
         <div class="audio-tracks-grid ${!isPlaying ? 'disabled-section' : ''}">
-          <div class="audio-track-card ${currentTrack === 'zen' ? 'active' : ''}" data-track="zen">
-            <div class="track-icon">🧘</div>
-            <div class="track-info">
-              <div class="track-name">Zen Sanctuary</div>
-              <div class="track-meta">432Hz Tibetan Singing Bowls</div>
-            </div>
-            ${currentTrack === 'zen' && isPlaying ? '<span class="audio-wave-anim"><span></span><span></span><span></span></span>' : ''}
-          </div>
 
           <div class="audio-track-card ${currentTrack === 'rain' ? 'active' : ''}" data-track="rain">
             <div class="track-icon">🌧️</div>

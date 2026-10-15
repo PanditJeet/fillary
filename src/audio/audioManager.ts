@@ -6,7 +6,7 @@
 
 import { StorageManager } from '../storage/storageManager.js';
 
-export type SoundscapeType = 'zen' | 'rain' | 'chimes';
+export type SoundscapeType = 'rain' | 'chimes';
 
 export class AudioManager {
   private static ctx: AudioContext | null = null;
@@ -16,7 +16,7 @@ export class AudioManager {
 
   private static isMusicPlaying = false;
   private static isSfxEnabled = true;
-  private static activeTrack: SoundscapeType = 'zen';
+  private static activeTrack: SoundscapeType = 'rain';
   private static volume = 0.70; // 70% default for optimal mobile speaker audibility
 
   // Active synthesizers
@@ -37,7 +37,11 @@ export class AudioManager {
     if (savedMusic !== null) this.isMusicPlaying = savedMusic === 'true';
     if (savedSfx !== null) this.isSfxEnabled = savedSfx === 'true';
     if (savedVol !== null) this.volume = parseFloat(savedVol);
-    if (savedTrack && ['zen', 'rain', 'chimes'].includes(savedTrack)) this.activeTrack = savedTrack;
+    if (savedTrack && ['rain', 'chimes'].includes(savedTrack)) {
+      this.activeTrack = savedTrack as SoundscapeType;
+    } else {
+      this.activeTrack = 'rain';
+    }
 
     this.isInitialized = true;
 
@@ -283,9 +287,7 @@ export class AudioManager {
     this.stopSoundscape();
     const ctx = this.ensureContext();
 
-    if (track === 'zen') {
-      this.synthesizeZenSanctuary(ctx);
-    } else if (track === 'rain') {
+    if (track === 'rain') {
       this.synthesizeCozyRain(ctx);
     } else if (track === 'chimes') {
       this.synthesizeCelestialChimes(ctx);
@@ -305,50 +307,6 @@ export class AudioManager {
       try { n.stop(); } catch {}
     });
     this.activeNodes = [];
-  }
-
-  /**
-   * 1. Zen Sanctuary: Meditative singing bowl chord harmonies tuned for mobile speaker audibility.
-   */
-  private static synthesizeZenSanctuary(ctx: AudioContext): void {
-    const freqs = [216, 324, 432, 540, 648];
-
-    freqs.forEach((freq, idx) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const filter = ctx.createBiquadFilter();
-
-      osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-
-      // Gentle LFO vibrato / beating effect
-      const lfo = ctx.createOscillator();
-      const lfoGain = ctx.createGain();
-      lfo.frequency.setValueAtTime(0.18 + idx * 0.06, ctx.currentTime);
-      lfoGain.gain.setValueAtTime(2.0, ctx.currentTime);
-      lfo.connect(osc.frequency);
-      lfo.start();
-
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(1100, ctx.currentTime);
-
-      gain.gain.setValueAtTime(0.24 / freqs.length, ctx.currentTime);
-
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.musicGain!);
-
-      osc.start();
-
-      this.activeNodes.push({
-        stop: () => {
-          try {
-            lfo.stop();
-            osc.stop();
-          } catch {}
-        }
-      });
-    });
   }
 
   /**
