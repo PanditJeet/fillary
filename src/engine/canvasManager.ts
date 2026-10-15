@@ -176,14 +176,14 @@ export class CanvasManager {
 
     if (isLandscape && isCompactHeight) {
       // Mobile / Compact Landscape: slim header & compact dock
-      topInset = 46;
-      bottomInset = 74;
-      sideInset = 16;
+      topInset = 42;
+      bottomInset = 66;
+      sideInset = 14;
     } else if (viewW <= 640) {
       // Mobile Portrait: standard header & docked palette
-      topInset = 66;
-      bottomInset = 175;
-      sideInset = 12;
+      topInset = 50;
+      bottomInset = 150;
+      sideInset = 10;
     } else if (isLandscape) {
       // Tablet / Desktop Landscape
       topInset = 76;
