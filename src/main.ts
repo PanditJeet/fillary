@@ -204,6 +204,10 @@ class App {
 }
 
 // Start application once DOM is ready
-window.addEventListener('DOMContentLoaded', () => {
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', () => {
+    new App();
+  });
+} else {
   new App();
-});
+}

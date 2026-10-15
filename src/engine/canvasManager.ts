@@ -212,8 +212,13 @@ export class CanvasManager {
   }
 
   private zoomToPoint(factor: number, clientX: number, clientY: number): void {
-    const newScale = Math.min(Math.max(this.transform.scale * factor, 0.4), 6.0);
-    const ratio = newScale / this.transform.scale;
+    if (isNaN(clientX) || isNaN(clientY)) {
+      clientX = this.displayCanvas.clientWidth / 2 || 0;
+      clientY = this.displayCanvas.clientHeight / 2 || 0;
+    }
+    const currentScale = this.transform.scale > 0 ? this.transform.scale : 1.0;
+    const newScale = Math.min(Math.max(currentScale * factor, 0.4), 6.0);
+    const ratio = newScale / currentScale;
 
     this.transform.offsetX = clientX - (clientX - this.transform.offsetX) * ratio;
     this.transform.offsetY = clientY - (clientY - this.transform.offsetY) * ratio;

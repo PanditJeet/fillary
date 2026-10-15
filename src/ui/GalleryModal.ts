@@ -1,6 +1,7 @@
 import { PAGES, ANIMAL_PAGES, MYSTICAL_PAGES } from '../pages/pageCatalog.js';
 import { HUMAN_CARTOON_PAGES } from '../pages/humanCartoons.js';
 import { PageMetadata } from '../engine/types.js';
+import { StorageManager } from '../storage/storageManager.js';
 
 export class GalleryModal {
   private overlay: HTMLElement;
@@ -24,6 +25,9 @@ export class GalleryModal {
   }
 
   public open(): void {
+    this.render();
+    this.setupListeners();
+    this.filterCards(this.activeCategory);
     this.overlay.classList.add('open');
   }
 
@@ -56,10 +60,21 @@ export class GalleryModal {
         </div>
 
         <div class="gallery-grid" id="gallery-grid-cards">
-          ${PAGES.map(page => `
+          ${PAGES.map(page => {
+            const prog = StorageManager.getPageProgress(page.id);
+            const thumb = prog?.dataUrl;
+            const hasProg = StorageManager.hasPageProgress(page.id);
+            return `
             <div class="gallery-card" data-page-id="${page.id}" data-category="${page.category}">
-              <div class="gallery-thumb-container">
-                ${page.imageUrl ? `<img src="${page.imageUrl}" alt="${page.title}" class="gallery-thumb-img" />` : (page.svgContent || '')}
+              <div class="gallery-thumb-container" style="position:relative; overflow:hidden;">
+                ${thumb
+                  ? `<div class="gallery-thumb-composite" style="position:relative; width:100%; height:100%;">
+                       <img src="${thumb}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain;" />
+                       ${page.imageUrl ? `<img src="${page.imageUrl}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
+                     </div>`
+                  : (page.imageUrl ? `<img src="${page.imageUrl}" alt="${page.title}" class="gallery-thumb-img" />` : (page.svgContent || ''))
+                }
+                ${hasProg ? `<span class="home-card-progress-badge" style="position:absolute; top:8px; right:8px; font-size:10px; padding:3px 8px;">In Progress</span>` : ''}
               </div>
               <div class="gallery-card-info">
                 <div class="gallery-card-meta">
@@ -69,7 +84,8 @@ export class GalleryModal {
                 <h3 class="gallery-card-title">${page.title}</h3>
               </div>
             </div>
-          `).join('')}
+            `;
+          }).join('')}
 
           <!-- Coming Soon Teaser Card -->
           <div class="gallery-coming-soon-card">

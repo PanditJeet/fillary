@@ -12,6 +12,13 @@ export class AudioModal {
     this.element.className = 'audio-modal-overlay modal-hidden';
     this.render();
     this.setupListeners();
+
+    // Close on Escape key (registered once)
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.isOpen) {
+        this.close();
+      }
+    });
   }
 
   public getElement(): HTMLElement {

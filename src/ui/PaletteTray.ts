@@ -40,17 +40,6 @@ export class PaletteTray {
         <!-- Top Row: Palette Themes & Custom Picker -->
         <div class="palette-tabs-row">
           <div class="palette-tabs" id="palette-tabs-list">
-            ${PALETTES.map(p => {
-              const isPremium = PaletteTray.PREMIUM_PALETTES.includes(p.id);
-              const isUnlocked = !isPremium || AdService.isPaletteUnlocked(p.id);
-              const lockBadge = !isUnlocked ? '<span class="palette-lock-icon">🔒</span>' : '';
-              return `
-                <button class="palette-tab-btn ${p.id === this.activePalette.id ? 'active' : ''} ${!isUnlocked ? 'locked-palette' : ''}" data-palette-id="${p.id}">
-                  ${lockBadge}
-                  <span>${p.name}</span>
-                </button>
-              `;
-            }).join('')}
           </div>
 
           <div class="color-picker-wrapper">
@@ -86,8 +75,24 @@ export class PaletteTray {
     this.tabsContainer = this.element.querySelector('#palette-tabs-list')!;
     this.colorInput = this.element.querySelector('#hidden-color-picker')!;
 
+    this.renderTabs();
     this.renderSwatches();
     this.renderRecentColors();
+  }
+
+  private renderTabs(): void {
+    if (!this.tabsContainer) return;
+    this.tabsContainer.innerHTML = PALETTES.map(p => {
+      const isPremium = PaletteTray.PREMIUM_PALETTES.includes(p.id);
+      const isUnlocked = !isPremium || AdService.isPaletteUnlocked(p.id);
+      const lockBadge = !isUnlocked ? '<span class="palette-lock-icon">🔒</span>' : '';
+      return `
+        <button class="palette-tab-btn ${p.id === this.activePalette.id ? 'active' : ''} ${!isUnlocked ? 'locked-palette' : ''}" data-palette-id="${p.id}">
+          ${lockBadge}
+          <span>${p.name}</span>
+        </button>
+      `;
+    }).join('');
   }
 
   private renderSwatches(): void {
@@ -202,7 +207,7 @@ export class PaletteTray {
             const earned = await AdService.showRewarded(`Unlock ${palette.name}`);
             if (earned) {
               AdService.unlockPalette(paletteId);
-              this.render(); // Re-render tabs with unlocked badge
+              this.renderTabs(); // Re-render tabs with unlocked badge
               this.selectPalette(paletteId);
             }
           }
