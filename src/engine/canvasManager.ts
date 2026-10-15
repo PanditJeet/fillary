@@ -101,6 +101,10 @@ export class CanvasManager {
     return this.currentColor;
   }
 
+  public getCurrentPage(): PageMetadata | null {
+    return this.currentPage;
+  }
+
   public getColorCanvasDataUrl(): string {
     return this.colorCanvas.toDataURL('image/png');
   }
@@ -310,7 +314,7 @@ export class CanvasManager {
           const b = d[i + 2];
           const lum = 0.299 * r + 0.587 * g + 0.114 * b;
 
-          if (lum > 210) {
+          if (lum > 225) {
             d[i + 3] = 0; // Pure transparent for all fillable areas
           } else {
             d[i] = 18;
@@ -345,7 +349,7 @@ export class CanvasManager {
           const r = d[i];
           const g = d[i + 1];
           const b = d[i + 2];
-          if (r > 210 && g > 210 && b > 210) {
+          if (r > 225 && g > 225 && b > 225) {
             d[i + 3] = 0; // Set alpha to 0 so it never occludes colors
           }
         }
@@ -377,8 +381,8 @@ export class CanvasManager {
       const b = data[idx + 2];
       const a = data[idx + 3];
 
-      // If opaque/semi-opaque and sufficiently dark (lum < 210), treat as line border
-      if (a > 60 && (0.299 * r + 0.587 * g + 0.114 * b) < 210) {
+      // If opaque/semi-opaque and sufficiently dark (lum <= 225), treat as line border
+      if (a > 50 && (0.299 * r + 0.587 * g + 0.114 * b) <= 225) {
         rawMask[i] = 1;
       } else {
         rawMask[i] = 0;
@@ -386,8 +390,7 @@ export class CanvasManager {
     }
 
     // Morphological micro-gap and diagonal seal pass
-    // This bridges 1-2 pixel micro-gaps and diagonal touches,
-    // ensuring flood fill never bleeds between distinct objects.
+    // Bridges 1-3 pixel gaps and diagonal steps, ensuring flood fill never bleeds between distinct objects.
     const width = this.canvasSize;
     const height = this.canvasSize;
 
@@ -412,6 +415,10 @@ export class CanvasManager {
         // Bridge diagonal corners so 4-connected scanline fill cannot slip diagonally
         const diagCorner = (left && up) || (right && up) || (left && down) || (right && down);
 
+        // Bridge opposing diagonal points
+        const diag1 = (x > 0 && y > 0 && rawMask[idx - width - 1] === 1) && (x < width - 1 && y < height - 1 && rawMask[idx + width + 1] === 1);
+        const diag2 = (x < width - 1 && y > 0 && rawMask[idx - width + 1] === 1) && (x > 0 && y < height - 1 && rawMask[idx + width - 1] === 1);
+
         // Bridge 2px micro-gaps
         const left2 = x > 1 && rawMask[idx - 2] === 1;
         const right2 = x < width - 2 && rawMask[idx + 2] === 1;
@@ -420,7 +427,15 @@ export class CanvasManager {
         const hGap2 = (left && right2) || (left2 && right);
         const vGap2 = (up && down2) || (up2 && down);
 
-        if (hGap || vGap || diagCorner || hGap2 || vGap2) {
+        // Bridge 3px micro-gaps
+        const left3 = x > 2 && rawMask[idx - 3] === 1;
+        const right3 = x < width - 3 && rawMask[idx + 3] === 1;
+        const up3 = y > 2 && rawMask[idx - width * 3] === 1;
+        const down3 = y < height - 3 && rawMask[idx + width * 3] === 1;
+        const hGap3 = (left && right3) || (left2 && right2) || (left3 && right);
+        const vGap3 = (up && down3) || (up2 && down2) || (up3 && down);
+
+        if (hGap || vGap || diagCorner || diag1 || diag2 || hGap2 || vGap2 || hGap3 || vGap3) {
           this.lineArtMask[idx] = 1;
         } else {
           this.lineArtMask[idx] = 0;

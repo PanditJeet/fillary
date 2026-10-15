@@ -128,14 +128,22 @@ class App {
   }
 
   private saveCurrentProgress(): void {
-    if (!this.currentPage) return;
+    if (this.currentView !== 'studio') return;
+    const canvasPage = this.canvasManager.getCurrentPage();
+    if (!canvasPage || !this.currentPage || canvasPage.id !== this.currentPage.id) return;
+
     const actions = this.canvasManager.history.getActions();
+    if (actions.length === 0 && !StorageManager.hasPageProgress(canvasPage.id)) {
+      return;
+    }
     const thumbUrl = this.canvasManager.getThumbnailDataUrl(256);
-    StorageManager.savePageProgress(this.currentPage.id, actions, thumbUrl);
+    StorageManager.savePageProgress(canvasPage.id, actions, thumbUrl);
   }
 
   public showHome(): void {
-    this.saveCurrentProgress();
+    if (this.currentView === 'studio') {
+      this.saveCurrentProgress();
+    }
     this.currentView = 'home';
     this.studioContainer.classList.add('view-hidden');
     this.studioContainer.classList.remove('view-active');

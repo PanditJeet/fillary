@@ -83,7 +83,7 @@ export class StorageManager {
   public static hasPageProgress(pageId: string): boolean {
     const progress = this.getPageProgress(pageId);
     if (!progress) return false;
-    return !!progress.dataUrl || (progress.actions && progress.actions.length > 0);
+    return !!(progress.actions && progress.actions.length > 0);
   }
 
   /**
