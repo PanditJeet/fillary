@@ -8,20 +8,21 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        configureWebViewPersistence();
+        configureWebView();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        configureWebViewPersistence();
+        configureWebView();
     }
 
-    private void configureWebViewPersistence() {
+    private void configureWebView() {
         if (bridge != null && bridge.getWebView() != null) {
             WebSettings settings = bridge.getWebView().getSettings();
             settings.setDomStorageEnabled(true);
             settings.setDatabaseEnabled(true);
+            settings.setMediaPlaybackRequiresUserGesture(false);
         }
     }
 }

@@ -99,11 +99,15 @@ class App {
         CapApp.addListener('appStateChange', (state) => {
           if (!state.isActive) {
             this.saveCurrentProgress();
+            AudioManager.pauseOnBackground();
+          } else {
+            AudioManager.resumeOnForeground();
           }
         }).catch(() => {});
 
         CapApp.addListener('pause', () => {
           this.saveCurrentProgress();
+          AudioManager.pauseOnBackground();
         }).catch(() => {});
 
         CapApp.addListener('backButton', () => {
@@ -188,6 +192,14 @@ class App {
 
     const pageToLoad = targetPage || this.currentPage || PAGES[0];
     await this.switchPage(pageToLoad);
+
+    // On first studio entry, start music automatically unless user explicitly disabled it
+    const savedMusicPref = StorageManager.getItem('fillary_audio_music');
+    if (savedMusicPref === null) {
+      AudioManager.setMusicEnabled(true);
+    } else {
+      AudioManager.startMusicIfPlaying();
+    }
     this.header.updateAudioState();
     
     // Ensure display canvas fits perfectly to the screen

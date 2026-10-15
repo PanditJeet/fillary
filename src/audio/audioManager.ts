@@ -17,7 +17,7 @@ export class AudioManager {
   private static isMusicPlaying = false;
   private static isSfxEnabled = true;
   private static activeTrack: SoundscapeType = 'zen';
-  private static volume = 0.35; // Soft 35% default for calming ambiance
+  private static volume = 0.70; // 70% default for optimal mobile speaker audibility
 
   // Active synthesizers
   private static activeNodes: Array<{ stop: () => void }> = [];
@@ -41,31 +41,34 @@ export class AudioManager {
 
     this.isInitialized = true;
 
-    // Unlock AudioContext on first user interaction (browser policy)
+    // Unlock AudioContext on first user interaction with retry until confirmed running
+    const unlockEvents = ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'];
     const unlockAudio = async () => {
       try {
         const ctx = this.ensureContext();
         if (ctx.state === 'suspended') {
           await ctx.resume();
         }
-        if (this.isMusicPlaying && this.activeNodes.length === 0) {
-          this.startSoundscape(this.activeTrack);
+        if (ctx.state === 'running') {
+          if (this.isMusicPlaying && this.activeNodes.length === 0) {
+            this.startSoundscape(this.activeTrack);
+          }
+          // Only remove once AudioContext is actively running
+          unlockEvents.forEach(evt => {
+            window.removeEventListener(evt, unlockAudio);
+          });
         }
       } catch (err) {
         console.warn('[AudioManager] Audio unlock error:', err);
-      } finally {
-        ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => {
-          window.removeEventListener(evt, unlockAudio);
-        });
       }
     };
 
-    ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => {
+    unlockEvents.forEach(evt => {
       window.addEventListener(evt, unlockAudio, { passive: true });
     });
   }
 
-  private static ensureContext(): AudioContext {
+  public static ensureContext(): AudioContext {
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new AudioCtx();
@@ -85,6 +88,46 @@ export class AudioManager {
     return this.ctx;
   }
 
+  public static async resumeContext(): Promise<AudioContext> {
+    const ctx = this.ensureContext();
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch (_) {}
+    }
+    return ctx;
+  }
+
+  public static startMusicIfPlaying(): void {
+    if (!this.isMusicPlaying) return;
+    const ctx = this.ensureContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(() => {
+        if (this.isMusicPlaying && this.activeNodes.length === 0) {
+          this.startSoundscape(this.activeTrack);
+        }
+      }).catch(() => {});
+    } else if (this.activeNodes.length === 0) {
+      this.startSoundscape(this.activeTrack);
+    }
+  }
+
+  public static pauseOnBackground(): void {
+    if (this.ctx && this.ctx.state === 'running') {
+      try {
+        this.ctx.suspend();
+      } catch (_) {}
+    }
+  }
+
+  public static resumeOnForeground(): void {
+    if (this.ctx && this.ctx.state === 'suspended' && this.isMusicPlaying) {
+      try {
+        this.ctx.resume();
+      } catch (_) {}
+    }
+  }
+
   /**
    * Toggles background music on / off.
    */
@@ -102,12 +145,17 @@ export class AudioManager {
       this.musicGain.gain.cancelScheduledValues(this.ctx.currentTime);
       if (this.isMusicPlaying) {
         if (this.ctx.state === 'suspended') {
-          this.ctx.resume().catch(() => {});
+          this.ctx.resume().then(() => {
+            if (this.activeNodes.length === 0) {
+              this.startSoundscape(this.activeTrack);
+            }
+          }).catch(() => {});
+        } else {
+          if (this.activeNodes.length === 0) {
+            this.startSoundscape(this.activeTrack);
+          }
         }
         this.musicGain.gain.setTargetAtTime(1, this.ctx.currentTime, 0.3);
-        if (this.activeNodes.length === 0) {
-          this.startSoundscape(this.activeTrack);
-        }
       } else {
         this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.3);
         this.stopFadeTimer = window.setTimeout(() => {
@@ -120,6 +168,11 @@ export class AudioManager {
     }
 
     return this.isMusicPlaying;
+  }
+
+  public static setMusicEnabled(enabled: boolean): void {
+    if (this.isMusicPlaying === enabled) return;
+    this.toggleMusic();
   }
 
   public static getIsMusicPlaying(): boolean {
@@ -178,31 +231,49 @@ export class AudioManager {
     if (!this.isSfxEnabled) return;
     try {
       const ctx = this.ensureContext();
-      if (ctx.state === 'suspended') ctx.resume();
-
-      const now = ctx.currentTime;
-
-      // Dual-oscillator waterdrop effect: fast upward pitch glide with soft exponential decay
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      // Pitch sweep: 380Hz -> 640Hz (mimicking water droplet pop)
-      const baseFreq = 380 + Math.random() * 80;
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(baseFreq, now);
-      osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.6, now + 0.08);
-
-      gain.gain.setValueAtTime(0.3, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-
-      osc.connect(gain);
-      gain.connect(this.sfxGain!);
-
-      osc.start(now);
-      osc.stop(now + 0.2);
+      if (ctx.state === 'suspended') {
+        ctx.resume().then(() => {
+          this.triggerWaterdrop(ctx);
+        }).catch(() => {});
+        return;
+      }
+      this.triggerWaterdrop(ctx);
     } catch {
       // AudioContext not ready or blocked
     }
+  }
+
+  private static triggerWaterdrop(ctx: AudioContext): void {
+    const now = ctx.currentTime;
+
+    // Dual-oscillator ASMR water droplet effect
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    // Pitch sweep: 440Hz -> 840Hz (crisp water droplet pop)
+    const baseFreq = 440 + Math.random() * 80;
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(baseFreq, now);
+    osc1.frequency.exponentialRampToValueAtTime(baseFreq * 1.85, now + 0.08);
+
+    // Warm resonant undertone
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(baseFreq * 0.5, now);
+    osc2.frequency.exponentialRampToValueAtTime(baseFreq * 0.95, now + 0.08);
+
+    // Punchy attack with soft exponential tail
+    gainNode.gain.setValueAtTime(0.75, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+    osc1.connect(gainNode);
+    osc2.connect(gainNode);
+    gainNode.connect(this.sfxGain!);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.23);
+    osc2.stop(now + 0.23);
   }
 
   /**
@@ -237,11 +308,10 @@ export class AudioManager {
   }
 
   /**
-   * 1. Zen Sanctuary: 432Hz meditative Tibetan singing bowl chords with warm low drone.
+   * 1. Zen Sanctuary: Meditative singing bowl chord harmonies tuned for mobile speaker audibility.
    */
   private static synthesizeZenSanctuary(ctx: AudioContext): void {
-    // Tibetan Singing Bowl Harmonic Frequencies: 108Hz (Root), 216Hz, 324Hz, 432Hz
-    const freqs = [108, 162, 216, 324, 432];
+    const freqs = [216, 324, 432, 540, 648];
 
     freqs.forEach((freq, idx) => {
       const osc = ctx.createOscillator();
@@ -254,15 +324,15 @@ export class AudioManager {
       // Gentle LFO vibrato / beating effect
       const lfo = ctx.createOscillator();
       const lfoGain = ctx.createGain();
-      lfo.frequency.setValueAtTime(0.15 + idx * 0.08, ctx.currentTime);
-      lfoGain.gain.setValueAtTime(1.5, ctx.currentTime);
+      lfo.frequency.setValueAtTime(0.18 + idx * 0.06, ctx.currentTime);
+      lfoGain.gain.setValueAtTime(2.0, ctx.currentTime);
       lfo.connect(osc.frequency);
       lfo.start();
 
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(650, ctx.currentTime);
+      filter.frequency.setValueAtTime(1100, ctx.currentTime);
 
-      gain.gain.setValueAtTime(0.08 / freqs.length, ctx.currentTime);
+      gain.gain.setValueAtTime(0.24 / freqs.length, ctx.currentTime);
 
       osc.connect(filter);
       filter.connect(gain);
@@ -282,11 +352,10 @@ export class AudioManager {
   }
 
   /**
-   * 2. Cozy Rain: Soft pink-noise rain simulation with bandpass filtered droplets.
+   * 2. Cozy Rain: Soft pink-noise rain simulation with crisp rainfall frequency textures.
    */
   private static synthesizeCozyRain(ctx: AudioContext): void {
-    // 5 seconds pink noise buffer looped
-    const bufferSize = ctx.sampleRate * 5;
+    const bufferSize = ctx.sampleRate * 4;
     const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
 
@@ -299,7 +368,7 @@ export class AudioManager {
       b3 = 0.86650 * b3 + white * 0.3104856;
       b4 = 0.55000 * b4 + white * 0.5329522;
       b5 = -0.7616 * b5 - white * 0.0168980;
-      output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.04;
+      output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.08;
       b6 = white * 0.115926;
     }
 
@@ -307,13 +376,13 @@ export class AudioManager {
     whiteNoise.buffer = noiseBuffer;
     whiteNoise.loop = true;
 
-    // Filter to sound like soft window rain
+    // Filter to sound like soothing window rainfall
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(800, ctx.currentTime);
+    filter.frequency.setValueAtTime(1200, ctx.currentTime);
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.35, ctx.currentTime);
+    gain.gain.setValueAtTime(0.50, ctx.currentTime);
 
     whiteNoise.connect(filter);
     filter.connect(gain);
@@ -329,15 +398,15 @@ export class AudioManager {
   }
 
   /**
-   * 3. Celestial Chimes: Gentle, crystal pentatonic chimes drifting over a calming pad.
+   * 3. Celestial Chimes: Gentle, crystal pentatonic chimes with lush presence.
    */
   private static synthesizeCelestialChimes(ctx: AudioContext): void {
-    // Background pad
+    // Warm harmonic background pad
     const padOsc = ctx.createOscillator();
     const padGain = ctx.createGain();
     padOsc.type = 'sine';
-    padOsc.frequency.setValueAtTime(144, ctx.currentTime);
-    padGain.gain.setValueAtTime(0.04, ctx.currentTime);
+    padOsc.frequency.setValueAtTime(288, ctx.currentTime);
+    padGain.gain.setValueAtTime(0.12, ctx.currentTime);
     padOsc.connect(padGain);
     padGain.connect(this.musicGain!);
     padOsc.start();
@@ -362,22 +431,25 @@ export class AudioManager {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, now);
 
-        gain.gain.setValueAtTime(0.06, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 2.5);
+        gain.gain.setValueAtTime(0.32, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 2.4);
 
         osc.connect(gain);
         gain.connect(this.musicGain!);
 
         osc.start(now);
-        osc.stop(now + 2.6);
+        osc.stop(now + 2.5);
       } catch {}
     };
 
-    // Trigger chimes at relaxing, organic intervals
+    // Initial chime
+    playRandomChime();
+
+    // Trigger chimes at relaxing intervals
     this.chimesTimer = window.setInterval(() => {
-      if (Math.random() > 0.3) {
+      if (Math.random() > 0.25) {
         playRandomChime();
       }
-    }, 1800);
+    }, 1600);
   }
 }
