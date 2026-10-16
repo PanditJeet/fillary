@@ -4,6 +4,43 @@ This guide walks you through every step to package, sign, and upload **Fillary**
 
 ---
 
+## 0. Before every Play Store release (required)
+
+### a) Real AdMob IDs
+The app falls back to Google's test ads unless real IDs are provided.
+
+1. In [AdMob](https://admob.google.com) create the app and two ad units: **Interstitial** and **Rewarded**.
+2. Create a file `C:\Fillary\.env.production` (it is git-ignored):
+   ```
+   VITE_ADMOB_ANDROID_INTERSTITIAL=ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX
+   VITE_ADMOB_ANDROID_REWARDED=ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX
+   ```
+3. Add your AdMob **App ID** to `android/gradle.properties`:
+   ```
+   ADMOB_APP_ID=ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX
+   ```
+   For GitHub Actions, add secrets `ADMOB_APP_ID`, `ADMOB_ANDROID_INTERSTITIAL`, `ADMOB_ANDROID_REWARDED` instead.
+
+### b) Release signing key
+1. Create a keystore once (keep it and its passwords safe forever — you need it for every update):
+   ```
+   keytool -genkey -v -keystore fillary-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias fillary
+   ```
+2. Create `android/keystore.properties` (git-ignored):
+   ```
+   FILLARY_KEYSTORE_FILE=C:/path/to/fillary-release.jks
+   FILLARY_KEYSTORE_PASSWORD=...
+   FILLARY_KEY_ALIAS=fillary
+   FILLARY_KEY_PASSWORD=...
+   ```
+   For GitHub Actions, add secrets `FILLARY_KEYSTORE_BASE64` (the .jks file base64-encoded), `FILLARY_KEYSTORE_PASSWORD`, `FILLARY_KEY_ALIAS`, `FILLARY_KEY_PASSWORD`.
+
+### c) Version number
+Every upload needs a higher `versionCode`. GitHub Actions uses the run number automatically.
+Locally, set `VERSION_CODE=2` (and `VERSION_NAME=1.1`) in `android/gradle.properties` before building.
+
+---
+
 ## 1. Prerequisites
 
 1. **Google Play Console Account:**
@@ -13,7 +50,7 @@ This guide walks you through every step to package, sign, and upload **Fillary**
 
 2. **Source Code Status:**
    - The native Android project is already fully generated in `C:\Fillary\android\` via Capacitor.
-   - Google AdMob configuration is pre-wired in `android/app/src/main/AndroidManifest.xml`.
+   - Google AdMob is wired up, but uses Google's **test** ads until you add your real IDs (see section 0 below).
    - The GitHub Actions build workflow is ready in `.github/workflows/build-android.yml`.
 
 ---
@@ -74,9 +111,9 @@ Before uploading, prepare these graphic assets:
    - **App access:** Select *"All functionality is available without special access"*.
    - **Ads:** Select *"Yes, my app contains ads"* (since we integrated Google AdMob).
    - **Content rating:** Fill out the short questionnaire (e.g., Casual/Art). Because Fillary has cute animals and peaceful cartoons, it will receive an **Everyone (3+)** rating.
-   - **Target audience:** Ages 13+ (or Everyone).
+   - **Target audience:** Select age groups that include children *and* adults (mixed audience). The app already tags every ad request as child-directed, limits ads to G-rated content and does not use the Advertising ID. In AdMob, also enable *"Families" / child-directed* settings for the app.
    - **News apps / COVID / Financial:** Select "No".
-   - **Data safety:** Fill out the brief declaration (AdMob collects anonymous diagnostic/device IDs for ads).
+   - **Data safety:** Declare that the app shows ads via Google AdMob (device/diagnostic data for ads and fraud prevention). The Advertising ID is **not** collected.
 
 3. **Store Listing:**
    - **Short description (80 chars):**

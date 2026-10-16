@@ -11,3 +11,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Release secrets (never commit)
+.env.production
+.env.*.local
+*.jks
+*.keystore
+android/keystore.properties

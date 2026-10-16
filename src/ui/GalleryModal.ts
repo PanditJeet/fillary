@@ -14,6 +14,23 @@ export class GalleryModal {
     this.overlay.className = 'modal-overlay';
     this.render();
     this.setupListeners();
+
+    // Overlay-level listeners are registered once (the overlay element itself is never re-created)
+    this.overlay.addEventListener('click', (e) => {
+      if (e.target === this.overlay) {
+        this.close();
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.isOpen()) {
+        this.close();
+      }
+    });
+  }
+
+  public isOpen(): boolean {
+    return this.overlay.classList.contains('open');
   }
 
   public getActiveCategory(): string {
@@ -121,13 +138,6 @@ export class GalleryModal {
       this.close();
     });
 
-    // Close on clicking backdrop outside modal
-    this.overlay.addEventListener('click', (e) => {
-      if (e.target === this.overlay) {
-        this.close();
-      }
-    });
-
     // Category Filter Clicks
     this.overlay.querySelector('.gallery-filter-tabs')?.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('.gallery-filter-btn');
@@ -151,11 +161,5 @@ export class GalleryModal {
       }
     });
 
-    // Close on Escape key
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.overlay.classList.contains('open')) {
-        this.close();
-      }
-    });
   }
 }

@@ -3,7 +3,7 @@ import { Toast } from './Toast.js';
 
 export class AudioModal {
   private element: HTMLElement;
-  private isOpen = false;
+  private opened = false;
   private onStateChange?: () => void;
 
   constructor(onStateChange?: () => void) {
@@ -15,7 +15,7 @@ export class AudioModal {
 
     // Close on Escape key (registered once)
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.isOpen) {
+      if (e.key === 'Escape' && this.opened) {
         this.close();
       }
     });
@@ -25,8 +25,12 @@ export class AudioModal {
     return this.element;
   }
 
+  public isOpen(): boolean {
+    return this.opened;
+  }
+
   public open(): void {
-    this.isOpen = true;
+    this.opened = true;
     this.render();
     this.setupListeners();
     this.element.classList.remove('modal-hidden');
@@ -34,7 +38,7 @@ export class AudioModal {
   }
 
   public close(): void {
-    this.isOpen = false;
+    this.opened = false;
     this.element.classList.remove('modal-active');
     this.element.classList.add('modal-hidden');
     if (this.onStateChange) {
@@ -43,7 +47,7 @@ export class AudioModal {
   }
 
   public toggle(): void {
-    if (this.isOpen) {
+    if (this.opened) {
       this.close();
     } else {
       this.open();
@@ -106,9 +110,9 @@ export class AudioModal {
         </div>
 
         <!-- Master Volume Slider -->
-        <div class="audio-setting-row volume-slider-row ${!isPlaying ? 'disabled-section' : ''}">
+        <div class="audio-setting-row volume-slider-row">
           <div class="audio-setting-label">
-            <span class="audio-setting-name">Music Volume</span>
+            <span class="audio-setting-name">Volume</span>
             <span class="audio-setting-desc" id="volume-indicator-text">${volumePercent}%</span>
           </div>
           <div class="volume-slider-container">

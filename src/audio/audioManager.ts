@@ -36,7 +36,10 @@ export class AudioManager {
 
     if (savedMusic !== null) this.isMusicPlaying = savedMusic === 'true';
     if (savedSfx !== null) this.isSfxEnabled = savedSfx === 'true';
-    if (savedVol !== null) this.volume = parseFloat(savedVol);
+    if (savedVol !== null) {
+      const v = parseFloat(savedVol);
+      if (isFinite(v)) this.volume = Math.max(0, Math.min(1, v));
+    }
     if (savedTrack && ['chimes'].includes(savedTrack)) {
       this.activeTrack = savedTrack as SoundscapeType;
     } else {

@@ -1,8 +1,12 @@
 import { PageMetadata, Point, ViewportTransform } from './types.js';
-import { scanlineFloodFill } from './floodFill.js';
-import { HistoryManager } from './history.js';
+import { floodFillDiff, hexToPacked } from './floodFill.js';
+import { HistoryManager, HistoryEntry } from './history.js';
 import { AudioManager } from '../audio/audioManager.js';
 import { PageProgress } from '../storage/storageManager.js';
+
+const MAX_ZOOM = 6.0;
+/** Minimum number of on-screen pixels of the artwork that must stay visible while panning. */
+const MIN_VISIBLE_PX = 80;
 
 export class CanvasManager {
   private displayCanvas: HTMLCanvasElement;
@@ -14,10 +18,20 @@ export class CanvasManager {
   private lineArtCanvas: HTMLCanvasElement;
   private lineArtCtx: CanvasRenderingContext2D;
 
-  private lineArtMask: Uint8Array = new Uint8Array(1024 * 1024);
   private canvasSize: number = 1024;
+  /** Pixels that block the fill (visible lines + invisible gap seals). */
+  private lineArtMask: Uint8Array = new Uint8Array(1024 * 1024);
+  /** Invisible gap-seal pixels: block the fill but get colored alongside the adjacent area. */
+  private gapMask: Uint8Array = new Uint8Array(1024 * 1024);
+
+  /** Source of truth for the color layer (avoids getImageData on every tap). */
+  private colorData: ImageData;
+  private color32: Uint32Array;
+  private readonly whitePacked = hexToPacked('#FFFFFF');
 
   private transform: ViewportTransform = { scale: 1, offsetX: 0, offsetY: 0 };
+  private fitScale = 1;
+  private userAdjustedView = false;
   private dragStart: Point = { x: 0, y: 0 };
   private lastClientWidth = 0;
   private lastClientHeight = 0;
@@ -30,6 +44,7 @@ export class CanvasManager {
 
   private currentColor: string = '#E07A5F';
   private currentPage: PageMetadata | null = null;
+  private loadToken = 0;
   public history: HistoryManager = new HistoryManager();
 
   private onTransformChange?: (scale: number) => void;
@@ -39,32 +54,39 @@ export class CanvasManager {
     this.displayCanvas = displayCanvas;
     this.displayCtx = displayCanvas.getContext('2d', { alpha: false })!;
 
-    // Create 1024x1024 offscreen color layer
+    // Offscreen color layer
     this.colorCanvas = document.createElement('canvas');
     this.colorCanvas.width = this.canvasSize;
     this.colorCanvas.height = this.canvasSize;
     this.colorCtx = this.colorCanvas.getContext('2d', { willReadFrequently: true })!;
 
-    // Create 1024x1024 offscreen line-art layer
+    // Offscreen line-art layer
     this.lineArtCanvas = document.createElement('canvas');
     this.lineArtCanvas.width = this.canvasSize;
     this.lineArtCanvas.height = this.canvasSize;
     this.lineArtCtx = this.lineArtCanvas.getContext('2d', { willReadFrequently: true })!;
 
+    this.colorData = new ImageData(this.canvasSize, this.canvasSize);
+    this.color32 = new Uint32Array(this.colorData.data.buffer);
+
     this.initColorCanvas();
     this.setupEventListeners();
     this.handleResize();
 
-    const onResizeHandler = () => {
+    const onResizeHandler = (forceFit = false) => {
       const changed = this.handleResize();
-      if (changed) {
+      if (!changed) return;
+      if (forceFit || !this.userAdjustedView) {
         this.fitToScreen();
+      } else {
+        this.clampTransform();
+        this.render();
       }
     };
 
-    window.addEventListener('resize', onResizeHandler);
+    window.addEventListener('resize', () => onResizeHandler());
     window.addEventListener('orientationchange', () => {
-      setTimeout(onResizeHandler, 100);
+      setTimeout(() => onResizeHandler(true), 100);
     });
 
     // Automatically observe parent resize / visibility changes
@@ -81,8 +103,12 @@ export class CanvasManager {
   }
 
   private initColorCanvas(): void {
-    this.colorCtx.fillStyle = '#FFFFFF';
-    this.colorCtx.fillRect(0, 0, this.canvasSize, this.canvasSize);
+    this.color32.fill(this.whitePacked);
+    this.flushColorLayer();
+  }
+
+  private flushColorLayer(): void {
+    this.colorCtx.putImageData(this.colorData, 0, 0);
   }
 
   public setOnTransformChange(cb: (scale: number) => void): void {
@@ -120,7 +146,7 @@ export class CanvasManager {
   }
 
   public getHasFills(): boolean {
-    return this.history.getActions().length > 0;
+    return this.history.actionCount > 0;
   }
 
   public handleResize(): boolean {
@@ -154,9 +180,9 @@ export class CanvasManager {
   }
 
   /**
-   * Reset zoom and center the 1024x1024 canvas in the display viewport.
-   * Dynamically adapts insets for portrait, landscape, mobile, and tablets
-   * to ensure zero obstruction by the floating header or bottom palette dock.
+   * Reset zoom and center the canvas in the display viewport.
+   * Adapts insets for portrait, landscape, mobile, and tablets
+   * so the floating header and bottom palette dock don't cover the artwork.
    */
   public fitToScreen(): void {
     const parent = this.displayCanvas.parentElement;
@@ -166,7 +192,6 @@ export class CanvasManager {
     const viewH = parent.clientHeight;
     if (viewW <= 0 || viewH <= 0) return;
 
-    // Adaptive insets based on device orientation and compact dimensions
     let topInset = 70;
     let bottomInset = 160;
     let sideInset = 24;
@@ -175,17 +200,14 @@ export class CanvasManager {
     const isCompactHeight = viewH < 620;
 
     if (isLandscape && isCompactHeight) {
-      // Mobile / Compact Landscape: slim header & compact dock
       topInset = 42;
       bottomInset = 66;
       sideInset = 14;
     } else if (viewW <= 640) {
-      // Mobile Portrait: standard header & docked palette
       topInset = 50;
       bottomInset = 150;
       sideInset = 10;
     } else if (isLandscape) {
-      // Tablet / Desktop Landscape
       topInset = 76;
       bottomInset = 150;
       sideInset = 32;
@@ -198,9 +220,16 @@ export class CanvasManager {
     const offsetX = (viewW - this.canvasSize * scale) / 2;
     const offsetY = topInset + (availableH - this.canvasSize * scale) / 2;
 
+    this.fitScale = scale;
+    this.userAdjustedView = false;
     this.transform = { scale, offsetX, offsetY };
     this.notifyTransform();
     this.render();
+  }
+
+  /** Smallest allowed zoom: a bit below the fitted size, so zoom-out always zooms out. */
+  private get minScale(): number {
+    return Math.min(0.4, this.fitScale * 0.75);
   }
 
   public zoomIn(): void {
@@ -217,15 +246,36 @@ export class CanvasManager {
       clientY = this.displayCanvas.clientHeight / 2 || 0;
     }
     const currentScale = this.transform.scale > 0 ? this.transform.scale : 1.0;
-    const newScale = Math.min(Math.max(currentScale * factor, 0.4), 6.0);
+    const newScale = Math.min(Math.max(currentScale * factor, this.minScale), MAX_ZOOM);
     const ratio = newScale / currentScale;
 
     this.transform.offsetX = clientX - (clientX - this.transform.offsetX) * ratio;
     this.transform.offsetY = clientY - (clientY - this.transform.offsetY) * ratio;
     this.transform.scale = newScale;
+    this.userAdjustedView = true;
 
+    this.clampTransform();
     this.notifyTransform();
     this.render();
+  }
+
+  private panBy(dx: number, dy: number): void {
+    this.transform.offsetX += dx;
+    this.transform.offsetY += dy;
+    this.userAdjustedView = true;
+    this.clampTransform();
+    this.render();
+  }
+
+  /** Keeps at least part of the artwork on screen so it can't be panned out of reach. */
+  private clampTransform(): void {
+    const viewW = this.displayCanvas.clientWidth;
+    const viewH = this.displayCanvas.clientHeight;
+    if (viewW <= 0 || viewH <= 0) return;
+    const size = this.canvasSize * this.transform.scale;
+    const margin = Math.min(MIN_VISIBLE_PX, size);
+    this.transform.offsetX = Math.min(Math.max(this.transform.offsetX, margin - size), viewW - margin);
+    this.transform.offsetY = Math.min(Math.max(this.transform.offsetY, margin - size), viewH - margin);
   }
 
   private notifyTransform(): void {
@@ -236,25 +286,33 @@ export class CanvasManager {
 
   /**
    * Loads a line-art page, creates boundary mask, and restores any saved progress.
+   * Returns false if a newer loadPage call superseded this one.
+   * Throws if the page artwork could not be loaded.
    */
   public async loadPage(
     page: PageMetadata,
     savedData?: PageProgress | Array<{ x: number; y: number; color: string }> | null
-  ): Promise<void> {
+  ): Promise<boolean> {
+    const token = ++this.loadToken;
+
+    // Load line-art into a temporary canvas first, so a slower earlier load can't overwrite a newer page
+    const art = page.imageUrl
+      ? await this.loadImageFileAsLineArt(page.imageUrl)
+      : page.svgContent
+        ? await this.loadSvgAsLineArt(page.svgContent)
+        : null;
+
+    if (token !== this.loadToken) return false;
+
     this.currentPage = page;
     this.history.clear();
+    this.color32.fill(this.whitePacked);
 
-    // Reset color layer to pristine white
-    this.initColorCanvas();
-
-    // Load line-art (either image file or SVG)
-    if (page.imageUrl) {
-      await this.renderImageFileToLineArtCanvas(page.imageUrl);
-    } else if (page.svgContent) {
-      await this.renderSvgToLineArtCanvas(page.svgContent);
+    this.lineArtCtx.clearRect(0, 0, this.canvasSize, this.canvasSize);
+    if (art) {
+      this.lineArtCtx.putImageData(art, 0, 0);
     }
 
-    // Compute boundary mask
     this.computeLineArtMask();
 
     // Restore saved progress if present
@@ -264,26 +322,28 @@ export class CanvasManager {
       const actions = isProgressObj ? progress!.actions : (savedData as Array<{ x: number; y: number; color: string }>);
 
       if (actions && actions.length > 0) {
-        // Replay actions sequentially to recreate multi-step undo history
-        const colorImgData = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
+        // Replay fills in order to rebuild the artwork and its undo history
         for (const act of actions) {
-          // Push snapshot before this action
-          this.history.pushSnapshot(colorImgData, {
+          const action = {
             pageId: page.id,
             x: act.x,
             y: act.y,
             color: act.color,
-            timestamp: Date.now()
-          });
-          scanlineFloodFill(colorImgData, this.lineArtMask, act.x, act.y, act.color);
+            timestamp: (act as { timestamp?: number }).timestamp || Date.now()
+          };
+          const diff = floodFillDiff(
+            this.color32, this.canvasSize, this.canvasSize,
+            this.lineArtMask, act.x, act.y, hexToPacked(act.color), this.gapMask
+          );
+          if (diff) {
+            this.history.push({ ...diff, action }, false);
+          }
+          // Fills that change nothing on replay are dropped (they were no-ops)
         }
-        this.colorCtx.putImageData(colorImgData, 0, 0);
+        this.history.notify();
       } else if (progress && progress.dataUrl) {
-        // Only raster dataUrl saved (no actions array):
-        // Save initial white state as base snapshot so user can undo back to clean white!
-        const initialWhite = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
-        this.history.pushSnapshot(initialWhite);
-
+        // Legacy raster-only save: draw it as the starting point (not undoable)
+        this.flushColorLayer();
         await new Promise<void>((resolve) => {
           const img = new Image();
           img.onload = () => {
@@ -293,14 +353,28 @@ export class CanvasManager {
           img.onerror = () => resolve();
           img.src = progress.dataUrl!;
         });
+        if (token !== this.loadToken) return false;
+        const loaded = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
+        this.colorData.data.set(loaded.data);
       }
     }
 
+    this.flushColorLayer();
     this.fitToScreen();
     this.render();
+    return true;
   }
 
-  private renderImageFileToLineArtCanvas(url: string): Promise<void> {
+  private drawToTempCanvas(img: CanvasImageSource): ImageData {
+    const tmp = document.createElement('canvas');
+    tmp.width = this.canvasSize;
+    tmp.height = this.canvasSize;
+    const ctx = tmp.getContext('2d', { willReadFrequently: true })!;
+    ctx.drawImage(img, 0, 0, this.canvasSize, this.canvasSize);
+    return ctx.getImageData(0, 0, this.canvasSize, this.canvasSize);
+  }
+
+  private loadImageFileAsLineArt(url: string): Promise<ImageData> {
     return new Promise((resolve, reject) => {
       const img = new Image();
       if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -308,21 +382,14 @@ export class CanvasManager {
       }
 
       img.onload = () => {
-        this.lineArtCtx.clearRect(0, 0, this.canvasSize, this.canvasSize);
-        this.lineArtCtx.drawImage(img, 0, 0, this.canvasSize, this.canvasSize);
-
-        // Convert light/white background pixels to transparent so colors underneath show through
-        // Keep linework bold and solid
-        const imgData = this.lineArtCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
+        // Convert light/white background pixels to transparent so colors underneath show through.
+        // Keep linework bold and solid.
+        const imgData = this.drawToTempCanvas(img);
         const d = imgData.data;
         for (let i = 0; i < d.length; i += 4) {
-          const r = d[i];
-          const g = d[i + 1];
-          const b = d[i + 2];
-          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-
+          const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
           if (lum > 225) {
-            d[i + 3] = 0; // Pure transparent for all fillable areas
+            d[i + 3] = 0;
           } else {
             d[i] = 18;
             d[i + 1] = 18;
@@ -330,45 +397,35 @@ export class CanvasManager {
             d[i + 3] = 255;
           }
         }
-        this.lineArtCtx.putImageData(imgData, 0, 0);
-        resolve();
+        resolve(imgData);
       };
 
-      img.onerror = (e) => reject(e);
+      img.onerror = () => reject(new Error(`Could not load artwork: ${url}`));
       img.src = url;
     });
   }
 
-  private renderSvgToLineArtCanvas(svgString: string): Promise<void> {
+  private loadSvgAsLineArt(svgString: string): Promise<ImageData> {
     return new Promise((resolve, reject) => {
       const img = new Image();
       const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(blob);
 
       img.onload = () => {
-        this.lineArtCtx.clearRect(0, 0, this.canvasSize, this.canvasSize);
-        this.lineArtCtx.drawImage(img, 0, 0, this.canvasSize, this.canvasSize);
-
-        // Strip any white/near-white pixels to transparent to guarantee colors underneath are visible
-        const imgData = this.lineArtCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
+        const imgData = this.drawToTempCanvas(img);
         const d = imgData.data;
         for (let i = 0; i < d.length; i += 4) {
-          const r = d[i];
-          const g = d[i + 1];
-          const b = d[i + 2];
-          if (r > 225 && g > 225 && b > 225) {
-            d[i + 3] = 0; // Set alpha to 0 so it never occludes colors
+          if (d[i] > 225 && d[i + 1] > 225 && d[i + 2] > 225) {
+            d[i + 3] = 0;
           }
         }
-        this.lineArtCtx.putImageData(imgData, 0, 0);
-
         URL.revokeObjectURL(url);
-        resolve();
+        resolve(imgData);
       };
 
-      img.onerror = (e) => {
+      img.onerror = () => {
         URL.revokeObjectURL(url);
-        reject(e);
+        reject(new Error('Could not load SVG artwork'));
       };
 
       img.src = url;
@@ -383,21 +440,16 @@ export class CanvasManager {
 
     for (let i = 0; i < len; i++) {
       const idx = i * 4;
-      const r = data[idx];
-      const g = data[idx + 1];
-      const b = data[idx + 2];
       const a = data[idx + 3];
-
-      // If opaque/semi-opaque and sufficiently dark (lum <= 225), treat as line border
-      if (a > 50 && (0.299 * r + 0.587 * g + 0.114 * b) <= 225) {
+      // Opaque/semi-opaque and sufficiently dark (lum <= 225) = visible line
+      if (a > 50 && (0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]) <= 225) {
         rawMask[i] = 1;
-      } else {
-        rawMask[i] = 0;
       }
     }
 
-    // Morphological micro-gap and diagonal seal pass
-    // Bridges 1-3 pixel gaps and diagonal steps, ensuring flood fill never bleeds between distinct objects.
+    // Morphological micro-gap and diagonal seal pass.
+    // Bridges 1-3 pixel gaps and diagonal steps so the fill never leaks between distinct objects.
+    // Bridged pixels go into gapMask: they block the fill but are colored together with the area they touch.
     const width = this.canvasSize;
     const height = this.canvasSize;
 
@@ -407,6 +459,7 @@ export class CanvasManager {
         const idx = yOffset + x;
         if (rawMask[idx] === 1) {
           this.lineArtMask[idx] = 1;
+          this.gapMask[idx] = 0;
           continue;
         }
 
@@ -415,18 +468,13 @@ export class CanvasManager {
         const up = y > 0 && rawMask[idx - width] === 1;
         const down = y < height - 1 && rawMask[idx + width] === 1;
 
-        // Bridge 1px micro-gaps horizontally or vertically
         const hGap = left && right;
         const vGap = up && down;
-
-        // Bridge diagonal corners so 4-connected scanline fill cannot slip diagonally
         const diagCorner = (left && up) || (right && up) || (left && down) || (right && down);
 
-        // Bridge opposing diagonal points
         const diag1 = (x > 0 && y > 0 && rawMask[idx - width - 1] === 1) && (x < width - 1 && y < height - 1 && rawMask[idx + width + 1] === 1);
         const diag2 = (x < width - 1 && y > 0 && rawMask[idx - width + 1] === 1) && (x > 0 && y < height - 1 && rawMask[idx + width - 1] === 1);
 
-        // Bridge 2px micro-gaps
         const left2 = x > 1 && rawMask[idx - 2] === 1;
         const right2 = x < width - 2 && rawMask[idx + 2] === 1;
         const up2 = y > 1 && rawMask[idx - width * 2] === 1;
@@ -434,7 +482,6 @@ export class CanvasManager {
         const hGap2 = (left && right2) || (left2 && right);
         const vGap2 = (up && down2) || (up2 && down);
 
-        // Bridge 3px micro-gaps
         const left3 = x > 2 && rawMask[idx - 3] === 1;
         const right3 = x < width - 3 && rawMask[idx + 3] === 1;
         const up3 = y > 2 && rawMask[idx - width * 3] === 1;
@@ -442,11 +489,9 @@ export class CanvasManager {
         const hGap3 = (left && right3) || (left2 && right2) || (left3 && right);
         const vGap3 = (up && down3) || (up2 && down2) || (up3 && down);
 
-        if (hGap || vGap || diagCorner || diag1 || diag2 || hGap2 || vGap2 || hGap3 || vGap3) {
-          this.lineArtMask[idx] = 1;
-        } else {
-          this.lineArtMask[idx] = 0;
-        }
+        const sealed = hGap || vGap || diagCorner || diag1 || diag2 || hGap2 || vGap2 || hGap3 || vGap3;
+        this.lineArtMask[idx] = sealed ? 1 : 0;
+        this.gapMask[idx] = sealed ? 1 : 0;
       }
     }
   }
@@ -457,68 +502,60 @@ export class CanvasManager {
   public fillAtScreenPoint(clientX: number, clientY: number): boolean {
     if (!this.currentPage) return false;
 
-    // Convert display client coordinates to 1024x1024 native coordinates
     const nativeX = Math.floor((clientX - this.transform.offsetX) / this.transform.scale);
     const nativeY = Math.floor((clientY - this.transform.offsetY) / this.transform.scale);
 
     if (nativeX < 0 || nativeX >= this.canvasSize || nativeY < 0 || nativeY >= this.canvasSize) {
-      return false; // Out of bounds
+      return false;
     }
 
-    const colorImgData = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
-
-    // Save snapshot before mutating for undo
-    this.history.pushSnapshot(colorImgData, {
-      pageId: this.currentPage.id,
-      x: nativeX,
-      y: nativeY,
-      color: this.currentColor,
-      timestamp: Date.now()
-    });
-
-    const changed = scanlineFloodFill(
-      colorImgData,
-      this.lineArtMask,
-      nativeX,
-      nativeY,
-      this.currentColor
+    const diff = floodFillDiff(
+      this.color32, this.canvasSize, this.canvasSize,
+      this.lineArtMask, nativeX, nativeY, hexToPacked(this.currentColor), this.gapMask
     );
 
-    if (changed) {
-      this.colorCtx.putImageData(colorImgData, 0, 0);
-      this.render();
-      AudioManager.playFillSound();
-      if (this.onFillChange) {
-        this.onFillChange(this.history.getActions().length);
-      }
-      return true;
-    }
+    // Taps on lines or same-colored areas change nothing and create no undo step
+    if (!diff) return false;
 
-    return false;
+    this.history.push({
+      ...diff,
+      action: {
+        pageId: this.currentPage.id,
+        x: nativeX,
+        y: nativeY,
+        color: this.currentColor,
+        timestamp: Date.now()
+      }
+    });
+
+    this.flushColorLayer();
+    this.render();
+    AudioManager.playFillSound();
+    this.onFillChange?.(this.history.actionCount);
+    return true;
+  }
+
+  private applyEntry(entry: HistoryEntry, revert: boolean): void {
+    const { indices, before, after } = entry;
+    const c = this.color32;
+    if (revert) {
+      for (let k = 0; k < indices.length; k++) c[indices[k]] = before[k];
+    } else {
+      for (let k = 0; k < indices.length; k++) c[indices[k]] = after;
+    }
+    this.flushColorLayer();
+    this.render();
+    this.onFillChange?.(this.history.actionCount);
   }
 
   public undo(): void {
-    const current = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
-    const prevState = this.history.undo(current);
-    if (prevState) {
-      this.colorCtx.putImageData(prevState, 0, 0);
-      this.render();
-      if (this.onFillChange) {
-        this.onFillChange(this.history.getActions().length);
-      }
-    }
+    const entry = this.history.undo();
+    if (entry) this.applyEntry(entry, true);
   }
 
   public redo(): void {
-    const current = this.colorCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
-    const nextState = this.history.redo(current);
-    if (nextState) {
-      this.colorCtx.putImageData(nextState, 0, 0);
-      this.render();
-      if (this.onFillChange) {
-        this.onFillChange(this.history.getActions().length);
-      }
-    }
+    const entry = this.history.redo();
+    if (entry) this.applyEntry(entry, false);
   }
 
   public resetCanvas(): void {
@@ -526,9 +563,7 @@ export class CanvasManager {
     this.history.clear();
     this.initColorCanvas();
     this.render();
-    if (this.onFillChange) {
-      this.onFillChange(0);
-    }
+    this.onFillChange?.(0);
   }
 
   /**
@@ -541,15 +576,13 @@ export class CanvasManager {
     this.displayCtx.save();
     this.displayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // Minimalist zen dark background around artwork
     this.displayCtx.fillStyle = '#0F1117';
     this.displayCtx.fillRect(0, 0, rect.width, rect.height);
 
-    // Apply zoom & pan translation
     this.displayCtx.translate(this.transform.offsetX, this.transform.offsetY);
     this.displayCtx.scale(this.transform.scale, this.transform.scale);
 
-    // Draw drop shadow behind paper canvas
+    // Drop shadow behind paper canvas
     this.displayCtx.save();
     this.displayCtx.shadowColor = 'rgba(0, 0, 0, 0.45)';
     this.displayCtx.shadowBlur = 35 / this.transform.scale;
@@ -558,17 +591,14 @@ export class CanvasManager {
     this.displayCtx.fillRect(0, 0, this.canvasSize, this.canvasSize);
     this.displayCtx.restore();
 
-    // 1. Draw color layer
     this.displayCtx.drawImage(this.colorCanvas, 0, 0);
-
-    // 2. Draw line-art layer on top (transparent background, only black lines)
     this.displayCtx.drawImage(this.lineArtCanvas, 0, 0);
 
     this.displayCtx.restore();
   }
 
   /**
-   * Export high-resolution 1024x1024 finished artwork.
+   * Export the finished 1024x1024 artwork as a PNG data URL.
    */
   public exportImage(): string {
     const exportCanvas = document.createElement('canvas');
@@ -576,11 +606,8 @@ export class CanvasManager {
     exportCanvas.height = this.canvasSize;
     const exportCtx = exportCanvas.getContext('2d')!;
 
-    // Paper background
     exportCtx.fillStyle = '#FFFFFF';
     exportCtx.fillRect(0, 0, this.canvasSize, this.canvasSize);
-
-    // Composite color + line-art
     exportCtx.drawImage(this.colorCanvas, 0, 0);
     exportCtx.drawImage(this.lineArtCanvas, 0, 0);
 
@@ -591,13 +618,16 @@ export class CanvasManager {
     const PAN_THRESHOLD = 7;
     let isMouseDown = false;
     let isActuallyPanning = false;
+    let mouseButton = 0;
     let mouseDownPos = { x: 0, y: 0 };
 
     // Mouse events
     this.displayCanvas.addEventListener('mousedown', (e) => {
       if (e.button !== 0 && e.button !== 1) return;
+      if (e.button === 1) e.preventDefault();
       isMouseDown = true;
       isActuallyPanning = false;
+      mouseButton = e.button;
       mouseDownPos = { x: e.clientX, y: e.clientY };
       this.dragStart = { x: e.clientX, y: e.clientY };
     });
@@ -613,10 +643,8 @@ export class CanvasManager {
       if (isActuallyPanning) {
         const dx = e.clientX - this.dragStart.x;
         const dy = e.clientY - this.dragStart.y;
-        this.transform.offsetX += dx;
-        this.transform.offsetY += dy;
         this.dragStart = { x: e.clientX, y: e.clientY };
-        this.render();
+        this.panBy(dx, dy);
       }
     });
 
@@ -626,8 +654,8 @@ export class CanvasManager {
 
       const totalDist = Math.hypot(e.clientX - mouseDownPos.x, e.clientY - mouseDownPos.y);
 
-      // If user did not pan past threshold, it's an intentional tap to fill!
-      if (!isActuallyPanning && totalDist <= PAN_THRESHOLD) {
+      // Left-click without dragging = fill (middle button only pans)
+      if (mouseButton === 0 && !isActuallyPanning && totalDist <= PAN_THRESHOLD) {
         const rect = this.displayCanvas.getBoundingClientRect();
         this.fillAtScreenPoint(e.clientX - rect.left, e.clientY - rect.top);
       }
@@ -637,10 +665,8 @@ export class CanvasManager {
     this.displayCanvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const rect = this.displayCanvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
       const factor = e.deltaY < 0 ? 1.15 : 0.87;
-      this.zoomToPoint(factor, mouseX, mouseY);
+      this.zoomToPoint(factor, e.clientX - rect.left, e.clientY - rect.top);
     }, { passive: false });
 
     // Touch events for mobile/tablet (pinch-to-zoom + pan + tap)
@@ -689,10 +715,8 @@ export class CanvasManager {
           // Continuing pan after lifting one of the two fingers
           const dx = t.clientX - this.dragStart.x;
           const dy = t.clientY - this.dragStart.y;
-          this.transform.offsetX += dx;
-          this.transform.offsetY += dy;
           this.dragStart = { x: t.clientX, y: t.clientY };
-          this.render();
+          this.panBy(dx, dy);
         } else {
           const totalDist = Math.hypot(t.clientX - touchStartPos.x, t.clientY - touchStartPos.y);
           if (!isTouchPanning && totalDist > 10) {
@@ -702,10 +726,8 @@ export class CanvasManager {
           if (isTouchPanning) {
             const dx = t.clientX - this.dragStart.x;
             const dy = t.clientY - this.dragStart.y;
-            this.transform.offsetX += dx;
-            this.transform.offsetY += dy;
             this.dragStart = { x: t.clientX, y: t.clientY };
-            this.render();
+            this.panBy(dx, dy);
           }
         }
       } else if (e.touches.length >= 2) {
@@ -737,7 +759,7 @@ export class CanvasManager {
             currentCenter.y - rect.top
           );
         } else {
-          this.render();
+          this.panBy(0, 0);
         }
       }
     }, { passive: false });

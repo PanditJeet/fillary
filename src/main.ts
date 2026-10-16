@@ -26,6 +26,7 @@ class App {
 
   private studioContainer!: HTMLElement;
   private currentView: ViewMode = 'home';
+  private saveTimer: number | null = null;
 
   constructor() {
     this.init();
@@ -89,8 +90,9 @@ class App {
     });
 
     this.canvasManager.setOnFillChange((_actionCount) => {
-      // Auto-save immediately upon fill so progress is never lost even if user abruptly leaves
-      this.saveCurrentProgress();
+      // Auto-save shortly after each fill (batched so rapid taps don't re-encode the thumbnail every time).
+      // Lifecycle events below flush immediately, so progress isn't lost if the app is closed.
+      this.scheduleSave();
     });
 
     // Native Capacitor App Lifecycle Listeners (Android APK)
@@ -111,9 +113,18 @@ class App {
         }).catch(() => {});
 
         CapApp.addListener('backButton', () => {
-          if (this.currentView === 'studio') {
+          // Close the top-most overlay first, then leave the studio, then exit
+          if (document.querySelector('.ad-simulation-overlay')) {
+            return;
+          }
+          if (this.audioModal.isOpen()) {
+            this.audioModal.close();
+          } else if (this.galleryModal.isOpen()) {
+            this.galleryModal.close();
+          } else if (this.currentView === 'studio') {
             this.showHome();
           } else {
+            this.saveCurrentProgress();
             CapApp.exitApp();
           }
         }).catch(() => {});
@@ -152,7 +163,19 @@ class App {
     return this.currentView;
   }
 
+  private scheduleSave(): void {
+    if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+    this.saveTimer = window.setTimeout(() => {
+      this.saveTimer = null;
+      this.saveCurrentProgress();
+    }, 400);
+  }
+
   private saveCurrentProgress(): void {
+    if (this.saveTimer !== null) {
+      window.clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
     if (this.currentView !== 'studio') return;
     const canvasPage = this.canvasManager.getCurrentPage();
     if (!canvasPage || !this.currentPage || canvasPage.id !== this.currentPage.id) return;
@@ -170,6 +193,7 @@ class App {
       this.saveCurrentProgress();
     }
     this.currentView = 'home';
+    this.galleryModal.close();
     this.studioContainer.classList.add('view-hidden');
     this.studioContainer.classList.remove('view-active');
     
@@ -193,13 +217,8 @@ class App {
     const pageToLoad = targetPage || this.currentPage || PAGES[0];
     await this.switchPage(pageToLoad);
 
-    // On first studio entry, start music automatically unless user explicitly disabled it
-    const savedMusicPref = StorageManager.getItem('fillary_audio_music');
-    if (savedMusicPref === null) {
-      AudioManager.setMusicEnabled(true);
-    } else {
-      AudioManager.startMusicIfPlaying();
-    }
+    // Music only plays if the user turned it on in Sound settings
+    AudioManager.startMusicIfPlaying();
     this.header.updateAudioState();
     
     // Ensure display canvas fits perfectly to the screen
@@ -219,15 +238,23 @@ class App {
       this.saveCurrentProgress();
     }
 
+    // Load saved progress (with raster dataUrl or action history)
+    const savedProgress = StorageManager.getPageProgress(page.id);
+    let loaded: boolean;
+    try {
+      loaded = await this.canvasManager.loadPage(page, savedProgress);
+    } catch (err) {
+      console.error('[App] Failed to load page', page.id, err);
+      Toast.show(`Couldn't open "${page.title}". Please try again.`);
+      return;
+    }
+    if (!loaded) return; // A newer page selection superseded this one
+
     this.currentPage = page;
     StorageManager.setActivePageId(page.id);
     this.header.updatePageInfo(page);
 
-    // Load saved progress (with raster dataUrl or action history)
-    const savedProgress = StorageManager.getPageProgress(page.id);
-    await this.canvasManager.loadPage(page, savedProgress);
-
-    const actionCount = savedProgress ? savedProgress.actions.length : 0;
+    const actionCount = this.canvasManager.history.actionCount;
     if (actionCount > 0 || (savedProgress && savedProgress.dataUrl)) {
       Toast.show(`Resumed "${page.title}" (${actionCount} fills)`);
     } else {

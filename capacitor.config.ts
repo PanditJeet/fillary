@@ -9,7 +9,7 @@ const config: CapacitorConfig = {
   },
   plugins: {
     AdMob: {
-      // Official Google AdMob Test App IDs
+      // Not used by the Android build: the AdMob App ID comes from ADMOB_APP_ID (android/gradle.properties)
       appIdAndroid: 'ca-app-pub-3940256099942544~3347511713',
       appIdIos: 'ca-app-pub-3940256099942544~1458002511'
     }

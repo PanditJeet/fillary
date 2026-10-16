@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -9,10 +10,11 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
-        <!-- Google AdMob App ID (Official Google Test ID) -->
+        <!-- Google AdMob App ID: set ADMOB_APP_ID in android/gradle.properties or as an env var
+             (falls back to Google's test App ID, see app/build.gradle) -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="${admobAppId}" />
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
@@ -43,4 +45,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Audience includes children (Google Play Families policy): never access the Advertising ID.
+         The Google Mobile Ads SDK adds this permission automatically, so remove it at merge time. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
 </manifest>

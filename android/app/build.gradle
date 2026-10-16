@@ -1,5 +1,25 @@
 apply plugin: 'com.android.application'
 
+// ---- Release configuration (values come from gradle.properties, keystore.properties or env vars) ----
+def readProp = { String name ->
+    def v = System.getenv(name)
+    if (v == null || v.trim().isEmpty()) v = project.findProperty(name)
+    return (v == null || v.toString().trim().isEmpty()) ? null : v.toString().trim()
+}
+
+def keystoreProps = new Properties()
+def keystorePropsFile = rootProject.file('keystore.properties')
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+def signingValue = { String name -> readProp(name) ?: keystoreProps.getProperty(name) }
+
+def releaseStoreFile = signingValue('FILLARY_KEYSTORE_FILE')
+def hasReleaseSigning = releaseStoreFile != null && file(releaseStoreFile).exists()
+
+// Google's official TEST AdMob App ID is used unless a real one is configured
+def admobAppId = readProp('ADMOB_APP_ID') ?: 'ca-app-pub-3940256099942544~3347511713'
+
 android {
     namespace = "com.fillary.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +27,9 @@ android {
         applicationId "com.fillary.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode((readProp('VERSION_CODE') ?: '1').toInteger())
+        versionName(readProp('VERSION_NAME') ?: '1.0')
+        manifestPlaceholders = [admobAppId: admobAppId]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +37,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword signingValue('FILLARY_KEYSTORE_PASSWORD')
+                keyAlias signingValue('FILLARY_KEY_ALIAS')
+                keyPassword signingValue('FILLARY_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

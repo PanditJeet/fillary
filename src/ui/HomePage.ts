@@ -3,6 +3,7 @@ import { PAGES } from '../pages/pageCatalog.js';
 import { StorageManager } from '../storage/storageManager.js';
 import { Logo } from './Logo.js';
 import { AudioManager } from '../audio/audioManager.js';
+import { PALETTES } from '../pages/paletteCatalog.js';
 
 export class HomePage {
   private element: HTMLElement;
@@ -209,16 +210,16 @@ export class HomePage {
           <div class="feature-pill-card">
             <div class="feature-icon">🎨</div>
             <div class="feature-text">
-              <h4>24 Harmonic Palettes</h4>
-              <p>Curated pastel, jewel, and earth tones for effortless color harmony.</p>
+              <h4>${PALETTES.length} Curated Palettes</h4>
+              <p>Hand-picked color sets for effortless color harmony, plus a custom color picker.</p>
             </div>
           </div>
 
           <div class="feature-pill-card">
             <div class="feature-icon">↺</div>
             <div class="feature-text">
-              <h4>Infinite History</h4>
-              <p>Full undo and redo freedom for completely anxiety-free coloring.</p>
+              <h4>Undo &amp; Redo</h4>
+              <p>Step back through your recent fills for completely anxiety-free coloring.</p>
             </div>
           </div>
 

@@ -1,32 +1,29 @@
-import { Capacitor } from '@capacitor/core';
-import { AdMob, RewardAdPluginEvents, AdMobRewardItem } from '@capacitor-community/admob';
+import { Capacitor, PluginListenerHandle } from '@capacitor/core';
+import {
+  AdMob,
+  RewardAdPluginEvents,
+  MaxAdContentRating
+} from '@capacitor-community/admob';
 import { Toast } from '../ui/Toast.js';
 import { StorageManager } from '../storage/storageManager.js';
-
-/**
- * Google AdMob Test Ad Unit IDs (Official Google Test IDs)
- * Safe to test on Android and iOS without triggering invalid traffic strikes.
- */
-const AD_UNITS = {
-  android: {
-    banner: 'ca-app-pub-3940256099942544/6300978111',
-    interstitial: 'ca-app-pub-3940256099942544/1033173712',
-    rewarded: 'ca-app-pub-3940256099942544/5224354917'
-  },
-  ios: {
-    banner: 'ca-app-pub-3940256099942544/2934735716',
-    interstitial: 'ca-app-pub-3940256099942544/4411468910',
-    rewarded: 'ca-app-pub-3940256099942544/1712485313'
-  }
-};
+import { AD_UNITS, USE_TEST_ADS } from '../config/ads.js';
 
 export class AdService {
   private static initialized = false;
   private static lastInterstitialTime = 0;
   private static readonly INTERSTITIAL_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes cooldown
 
+  private static adIds(): { interstitial: string; rewarded: string } {
+    const platform = Capacitor.getPlatform() === 'ios' ? 'ios' : 'android';
+    return AD_UNITS[platform];
+  }
+
   /**
    * Initializes the Google AdMob SDK.
+   *
+   * Fillary's audience includes children, so every ad request is tagged as
+   * child-directed (COPPA) / under the age of consent (GDPR) and limited to
+   * "General" (G-rated) content, as required by Google Play's Families policy.
    */
   public static async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -34,17 +31,15 @@ export class AdService {
     if (Capacitor.isNativePlatform()) {
       try {
         await AdMob.initialize({
-          testingDevices: ['EMULATOR'],
-          initializeForTesting: true
+          initializeForTesting: USE_TEST_ADS,
+          testingDevices: USE_TEST_ADS ? ['EMULATOR'] : [],
+          tagForChildDirectedTreatment: true,
+          tagForUnderAgeOfConsent: true,
+          maxAdContentRating: MaxAdContentRating.General
         });
 
-        // Request tracking authorization for iOS ATT if required
-        if (Capacitor.getPlatform() === 'ios') {
-          await AdMob.requestTrackingAuthorization();
-        }
-
         this.initialized = true;
-        console.log('[AdService] Google AdMob SDK initialized on native platform.');
+        console.log(`[AdService] AdMob initialized (${USE_TEST_ADS ? 'TEST ads' : 'production ads'}).`);
       } catch (err) {
         console.warn('[AdService] AdMob native initialization failed:', err);
       }
@@ -61,30 +56,26 @@ export class AdService {
   public static async showInterstitial(placement: string = 'export'): Promise<boolean> {
     const now = Date.now();
     if (now - this.lastInterstitialTime < this.INTERSTITIAL_COOLDOWN_MS) {
-      console.log(`[AdService] Interstitial cooldown active (${Math.round((this.INTERSTITIAL_COOLDOWN_MS - (now - this.lastInterstitialTime)) / 1000)}s left)`);
       return false;
     }
 
-    this.lastInterstitialTime = now;
-
     if (Capacitor.isNativePlatform()) {
+      if (!this.initialized) return false;
       try {
-        const platform = Capacitor.getPlatform() as 'ios' | 'android';
-        const adId = AD_UNITS[platform]?.interstitial || AD_UNITS.android.interstitial;
-
         await AdMob.prepareInterstitial({
-          adId,
-          isTesting: true
+          adId: this.adIds().interstitial,
+          isTesting: USE_TEST_ADS
         });
 
         await AdMob.showInterstitial();
+        this.lastInterstitialTime = Date.now();
         return true;
       } catch (err) {
         console.warn('[AdService] Native interstitial failed:', err);
         return false;
       }
     } else {
-      // Show simulated web ad modal
+      this.lastInterstitialTime = now;
       return this.simulateWebAd('interstitial', `Sponsored Interstitial (${placement})`);
     }
   }
@@ -92,34 +83,51 @@ export class AdService {
   /**
    * Displays a Rewarded Video Ad to grant the user a reward (e.g. unlocking a bonus palette).
    * Resolves true only if the user finished watching and earned the reward.
+   * Always resolves once the ad is closed (even if the user skipped it).
    */
   public static async showRewarded(rewardPurpose: string = 'Unlock Premium Palette'): Promise<boolean> {
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const platform = Capacitor.getPlatform() as 'ios' | 'android';
-        const adId = AD_UNITS[platform]?.rewarded || AD_UNITS.android.rewarded;
-
-        await AdMob.prepareRewardVideoAd({
-          adId,
-          isTesting: true
-        });
-
-        let earned = false;
-        const rewardListener = await AdMob.addListener(RewardAdPluginEvents.Rewarded, (reward: AdMobRewardItem) => {
-          console.log('[AdService] Rewarded video completed:', reward);
-          earned = true;
-        });
-
-        await AdMob.showRewardVideoAd();
-        await rewardListener.remove();
-        return earned;
-      } catch (err) {
-        console.warn('[AdService] Native rewarded ad failed:', err);
-        return false;
-      }
-    } else {
-      // Show simulated web rewarded ad modal
+    if (!Capacitor.isNativePlatform()) {
       return this.simulateWebAd('rewarded', rewardPurpose);
+    }
+
+    if (!this.initialized) {
+      Toast.show('Ads are not available right now. Please try again later.');
+      return false;
+    }
+
+    const handles: PluginListenerHandle[] = [];
+    try {
+      await AdMob.prepareRewardVideoAd({
+        adId: this.adIds().rewarded,
+        isTesting: USE_TEST_ADS
+      });
+
+      let earned = false;
+      // AdMob's show() promise only settles when a reward is earned, so wait for the
+      // ad to be dismissed (or fail) instead of awaiting show() directly.
+      const closed = new Promise<void>((resolve) => {
+        AdMob.addListener(RewardAdPluginEvents.Rewarded, () => { earned = true; })
+          .then(h => handles.push(h));
+        AdMob.addListener(RewardAdPluginEvents.Dismissed, () => resolve())
+          .then(h => handles.push(h));
+        AdMob.addListener(RewardAdPluginEvents.FailedToShow, () => resolve())
+          .then(h => handles.push(h));
+      });
+
+      AdMob.showRewardVideoAd()
+        .then(() => { earned = true; })
+        .catch((err) => console.warn('[AdService] Rewarded show failed:', err));
+
+      await closed;
+      return earned;
+    } catch (err) {
+      console.warn('[AdService] Native rewarded ad failed:', err);
+      Toast.show('No video available right now. Please try again later.');
+      return false;
+    } finally {
+      for (const h of handles) {
+        h.remove().catch(() => {});
+      }
     }
   }
 
@@ -132,7 +140,7 @@ export class AdService {
   }
 
   /**
-   * Unlocks a palette permanently or for the session.
+   * Unlocks a palette permanently.
    */
   public static unlockPalette(paletteId: string): void {
     StorageManager.setItem(`fillary_unlocked_palette_${paletteId}`, 'true');
@@ -140,8 +148,8 @@ export class AdService {
   }
 
   /**
-   * Clean, minimalist Web / Simulator Ad Modal with countdown.
-   * Lets users test the full monetization flow without needing a native mobile build.
+   * Minimal web/simulator ad modal with countdown, so the monetization
+   * flow can be tested in a browser without a native build.
    */
   private static simulateWebAd(type: 'interstitial' | 'rewarded', title: string): Promise<boolean> {
     return new Promise((resolve) => {
@@ -155,17 +163,18 @@ export class AdService {
           <div class="ad-simulation-badge">${type === 'rewarded' ? '🎁 Rewarded Ad' : '✨ Sponsored Ad'}</div>
           <div class="ad-simulation-media">
             <div class="ad-media-icon">🎨</div>
-            <h3>${title}</h3>
-            <p>Google AdMob Simulator • Production Test Mode</p>
+            <h3></h3>
+            <p>Ad simulator (browser preview only)</p>
           </div>
           <div class="ad-simulation-timer" id="ad-timer">
-            ${secondsLeft > 0 ? `Reward in ${secondsLeft}s...` : 'Ready to Close'}
+            ${type === 'rewarded' ? `Reward in ${secondsLeft}s...` : `Closing in ${secondsLeft}s...`}
           </div>
           <button class="ad-simulation-btn" id="ad-close-btn" disabled>
             <span>Please wait...</span>
           </button>
         </div>
       `;
+      modal.querySelector('h3')!.textContent = title;
 
       document.body.appendChild(modal);
 
@@ -181,7 +190,7 @@ export class AdService {
           closeBtn.classList.add('ad-btn-active');
           closeBtn.innerHTML = `<span>${type === 'rewarded' ? 'Claim Reward' : 'Continue'}</span>`;
         } else {
-          timerEl.textContent = `Reward in ${secondsLeft}s...`;
+          timerEl.textContent = type === 'rewarded' ? `Reward in ${secondsLeft}s...` : `Closing in ${secondsLeft}s...`;
         }
       }, 1000);
 

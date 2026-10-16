@@ -117,36 +117,29 @@ console.log('====================================================\n');
 console.log('Test 1: HistoryManager Lockstep Synchronization');
 const history = new HistoryManager(25);
 
-// Push base snapshot without action (e.g. initial canvas state)
-const baseImg = { width: 10, height: 10, data: new Uint8ClampedArray(400) } as unknown as ImageData;
-history.pushSnapshot(baseImg);
-assert(history.canUndo === true, 'Initial base snapshot is undoable');
-assert(history.getActions().length === 0, 'No actions recorded for base initial snapshot');
+const mkDiff = () => ({ indices: new Uint32Array([1, 2]), before: new Uint32Array([0, 0]), after: 7 });
 
 // Push 3 fill actions
 for (let i = 1; i <= 3; i++) {
-  const img = { width: 10, height: 10, data: new Uint8ClampedArray(400) } as unknown as ImageData;
-  history.pushSnapshot(img, { pageId: 'test', x: i * 10, y: i * 10, color: '#FF0000', timestamp: Date.now() });
+  history.push({ ...mkDiff(), action: { pageId: 'test', x: i * 10, y: i * 10, color: '#FF0000', timestamp: Date.now() } });
 }
 assert(history.getActions().length === 3, 'Recorded exactly 3 actions');
 
 // Undo 1 step
-const curImg = { width: 10, height: 10, data: new Uint8ClampedArray(400) } as unknown as ImageData;
-history.undo(curImg);
+history.undo();
 assert(history.getActions().length === 2, 'Actions reduced to 2 after 1 undo');
 assert(history.canRedo === true, 'canRedo is true after undo');
 
 // Redo 1 step
-history.redo(curImg);
+history.redo();
 assert(history.getActions().length === 3, 'Actions restored to 3 after redo');
 
 // Undo all 3 actions
-history.undo(curImg);
-history.undo(curImg);
-history.undo(curImg);
+history.undo();
+history.undo();
+history.undo();
 assert(history.getActions().length === 0, 'Actions strictly 0 after undoing all fill actions');
-// Undo back to base snapshot
-history.undo(curImg);
+history.undo();
 assert(history.canUndo === false, 'Undo stack completely exhausted');
 assert(history.getActions().length === 0, 'Actions strictly remains 0, no negative or dangling actions');
 

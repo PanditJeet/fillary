@@ -5,6 +5,7 @@ import { Logo } from './Logo.js';
 import { AdService } from '../services/adService.js';
 import { AudioManager } from '../audio/audioManager.js';
 import { StorageManager } from '../storage/storageManager.js';
+import { exportPng } from '../services/exportService.js';
 
 export class FloatingHeader {
   private element: HTMLElement;
@@ -20,6 +21,7 @@ export class FloatingHeader {
   private titleEl!: HTMLElement;
   private categoryEl!: HTMLElement;
   private currentPage?: PageMetadata;
+  private isExporting = false;
 
   constructor(
     canvasManager: CanvasManager,
@@ -217,66 +219,57 @@ export class FloatingHeader {
 
     // Keyboard shortcuts
     window.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      if (!(e.ctrlKey || e.metaKey) || !this.isStudioVisible()) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
           this.canvasManager.redo();
         } else {
           this.canvasManager.undo();
         }
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      } else if (key === 'y') {
         e.preventDefault();
         this.canvasManager.redo();
       }
     });
   }
 
+  private isStudioVisible(): boolean {
+    return !this.element.closest('.view-hidden') && !document.querySelector('.modal-overlay.open, .audio-modal-overlay.modal-active');
+  }
+
   private async exportArtwork(): Promise<void> {
-    // Show non-intrusive interstitial ad (respects 2-minute cooldown)
-    await AdService.showInterstitial('export');
-
-    const dataUrl = this.canvasManager.exportImage();
-    const title = this.titleEl?.textContent || 'art';
-    const fileName = `Fillary-${title.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.png`;
-
-    // Attempt Native Web Share API first (supported by mobile Chrome/Android, Safari/iOS)
-    if ('share' in navigator && typeof navigator.share === 'function') {
-      try {
-        const res = await fetch(dataUrl);
-        const blob = await res.blob();
-        const file = new File([blob], fileName, { type: 'image/png' });
-
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: `Fillary — ${title}`,
-            text: 'Colored with Fillary Mindful Coloring'
-          });
-          Toast.show('Artwork shared successfully! ✨');
-          return;
-        }
-      } catch (err: unknown) {
-        if (err instanceof Error && err.name === 'AbortError') {
-          return; // User cancelled share sheet
-        }
-        console.warn('[FloatingHeader] Web Share failed, falling back to download:', err);
-      }
-    }
-
-    // Fallback: Standard browser download link
+    if (this.isExporting) return;
+    this.isExporting = true;
     try {
-      const link = document.createElement('a');
-      link.download = fileName;
-      link.href = dataUrl;
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      setTimeout(() => link.remove(), 100);
-      Toast.show('High-res artwork exported');
-    } catch (e) {
-      console.error('[FloatingHeader] Export download error:', e);
-      window.open(dataUrl, '_blank');
-      Toast.show('Artwork opened in new tab');
+      // Show non-intrusive interstitial ad (respects 2-minute cooldown)
+      await AdService.showInterstitial('export');
+
+      const dataUrl = this.canvasManager.exportImage();
+      const title = this.titleEl?.textContent || 'art';
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'art';
+      const fileName = `Fillary-${slug}-${Date.now()}.png`;
+
+      const result = await exportPng(dataUrl, fileName, title);
+      switch (result) {
+        case 'saved':
+          Toast.show('Saved to your Gallery (Pictures/Fillary) ✨');
+          break;
+        case 'shared':
+          Toast.show('Artwork ready to share ✨');
+          break;
+        case 'downloaded':
+          Toast.show('High-res artwork downloaded');
+          break;
+        case 'failed':
+          Toast.show("Couldn't export the artwork. Please try again.");
+          break;
+        case 'cancelled':
+          break;
+      }
+    } finally {
+      this.isExporting = false;
     }
   }
 }

@@ -11,6 +11,13 @@ jobs:
 
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
+      # Play Store requires a higher versionCode for every upload
+      VERSION_CODE: ${{ github.run_number }}
+      # Real AdMob IDs (optional). Without them the build uses Google's test ads.
+      ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
+      VITE_ADMOB_ANDROID_INTERSTITIAL: ${{ secrets.ADMOB_ANDROID_INTERSTITIAL }}
+      VITE_ADMOB_ANDROID_REWARDED: ${{ secrets.ADMOB_ANDROID_REWARDED }}
+      HAS_KEYSTORE: ${{ secrets.FILLARY_KEYSTORE_BASE64 != '' }}
 
     steps:
       - name: Checkout Repository
@@ -36,8 +43,8 @@ jobs:
 
       - name: Setup Android SDK 36
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" || true
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36"
 
       - name: Sync Capacitor Android
         run: npx cap sync android
@@ -48,10 +55,24 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleDebug
 
-      - name: Build Android App Bundle (.aab)
+      - name: Restore Release Keystore
+        if: env.HAS_KEYSTORE == 'true'
+        run: echo "${{ secrets.FILLARY_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/fillary-release.jks"
+
+      - name: Build Signed Android App Bundle (.aab)
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          FILLARY_KEYSTORE_FILE: ${{ runner.temp }}/fillary-release.jks
+          FILLARY_KEYSTORE_PASSWORD: ${{ secrets.FILLARY_KEYSTORE_PASSWORD }}
+          FILLARY_KEY_ALIAS: ${{ secrets.FILLARY_KEY_ALIAS }}
+          FILLARY_KEY_PASSWORD: ${{ secrets.FILLARY_KEY_PASSWORD }}
         run: |
           cd android
-          ./gradlew bundleRelease || true
+          ./gradlew bundleRelease
+
+      - name: Note about missing signing key
+        if: env.HAS_KEYSTORE != 'true'
+        run: echo "::warning::No FILLARY_KEYSTORE_BASE64 secret set - skipped the signed Play Store bundle. See PLAYSTORE_GUIDE.md."
 
       - name: Upload Installable APK (.apk)
         uses: actions/upload-artifact@v4
@@ -60,8 +81,9 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload Android App Bundle (.aab)
+        if: env.HAS_KEYSTORE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Fillary-Release-AAB
           path: android/app/build/outputs/bundle/release/app-release.aab
-          if-no-files-found: warn
+          if-no-files-found: error

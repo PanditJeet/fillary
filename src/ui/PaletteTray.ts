@@ -134,13 +134,15 @@ export class PaletteTray {
     });
   }
 
-  public selectColor(hex: string): void {
+  public selectColor(hex: string, addToRecent = true): void {
     const normalized = this.normalizeHex(hex);
     this.currentColor = normalized;
     this.canvasManager.setCurrentColor(normalized);
     this.colorInput.value = normalized;
 
-    StorageManager.addRecentColor(normalized);
+    if (addToRecent) {
+      StorageManager.addRecentColor(normalized);
+    }
 
     // Update active UI classes
     const swatches = this.swatchesContainer.querySelectorAll('.color-swatch');
@@ -166,9 +168,9 @@ export class PaletteTray {
     });
 
     this.renderSwatches();
-    // Default to the first color in newly selected palette
+    // Default to the first color in newly selected palette (not added to Recent until used)
     if (this.activePalette.colors.length > 0) {
-      this.selectColor(this.activePalette.colors[0]);
+      this.selectColor(this.activePalette.colors[0], false);
     }
   }
 
@@ -224,9 +226,15 @@ export class PaletteTray {
       this.colorInput.click();
     });
 
+    // While dragging in the picker, preview the color without touching Recent / storage
     this.colorInput.addEventListener('input', (e) => {
       const val = (e.target as HTMLInputElement).value;
-      this.selectColor(val);
+      this.selectColor(val, false);
+    });
+    // Commit to Recent once the picker is closed
+    this.colorInput.addEventListener('change', (e) => {
+      const val = (e.target as HTMLInputElement).value;
+      this.selectColor(val, true);
     });
   }
 }

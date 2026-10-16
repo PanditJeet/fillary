@@ -53,24 +53,29 @@ export class StorageManager {
     if (this.canUsePreferences()) {
       try {
         const { keys } = await Preferences.keys();
-        for (const key of keys) {
-          if (key.startsWith('fillary_')) {
-            const { value } = await Preferences.get({ key });
-            if (value !== null && value !== undefined) {
-              this.cache.set(key, value);
-              // Mirror back to localStorage for redundancy
-              if (typeof localStorage !== 'undefined') {
-                try {
-                  localStorage.setItem(key, value);
-                } catch (_) {}
-              }
-            }
+        const fillaryKeys = keys.filter(k => k.startsWith('fillary_'));
+        const entries = await Promise.all(
+          fillaryKeys.map(async key => ({ key, value: (await Preferences.get({ key })).value }))
+        );
+        const nativeKeys = new Set<string>();
+        for (const { key, value } of entries) {
+          if (value === null || value === undefined) continue;
+          nativeKeys.add(key);
+          if (this.cache.get(key) === value) continue;
+          this.cache.set(key, value);
+          // Mirror back to localStorage for redundancy
+          if (typeof localStorage !== 'undefined') {
+            try {
+              localStorage.setItem(key, value);
+            } catch (_) {}
           }
         }
 
-        // 3. Migrate any localStorage keys not yet in Preferences
+        // 3. Migrate only localStorage keys that are missing from Preferences
         for (const [key, value] of this.cache.entries()) {
-          Preferences.set({ key, value }).catch(() => {});
+          if (!nativeKeys.has(key)) {
+            Preferences.set({ key, value }).catch(() => {});
+          }
         }
       } catch (e) {
         console.warn('Preferences.init fallback to localStorage:', e);

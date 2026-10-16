@@ -7,6 +7,8 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Local native plugin used for saving/sharing exported artwork
+        registerPlugin(FillaryExportPlugin.class);
         super.onCreate(savedInstanceState);
         configureWebView();
     }
