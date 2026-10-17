@@ -57,15 +57,39 @@ jobs:
 
       - name: Restore Release Keystore
         if: env.HAS_KEYSTORE == 'true'
-        run: echo "${{ secrets.FILLARY_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/fillary-release.jks"
+        env:
+          KS_B64: ${{ secrets.FILLARY_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.FILLARY_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.FILLARY_KEY_ALIAS }}
+          KS_KEYPASS: ${{ secrets.FILLARY_KEY_PASSWORD }}
+        run: |
+          # Remove any spaces / line breaks that sneak in when pasting secrets
+          printf '%s' "$KS_B64" | tr -d ' \r\n\t' | base64 -d > "$RUNNER_TEMP/fillary-release.jks"
+          clean() { printf '%s' "$1" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+          P="$(clean "$KS_PASS")"; A="$(clean "$KS_ALIAS")"; K="$(clean "$KS_KEYPASS")"
+          echo "::add-mask::$P"; echo "::add-mask::$K"
+          {
+            echo "FILLARY_KEYSTORE_PASSWORD=$P"
+            echo "FILLARY_KEY_ALIAS=$A"
+            echo "FILLARY_KEY_PASSWORD=$K"
+          } >> "$GITHUB_ENV"
+          # Clear checks so a wrong secret is obvious in the log
+          if ! keytool -list -keystore "$RUNNER_TEMP/fillary-release.jks" -storepass "$P" > "$RUNNER_TEMP/ks.txt" 2>&1; then
+            echo "::error::Could not open the keystore. Either FILLARY_KEYSTORE_BASE64 is not the full text of FILLARY_KEYSTORE_BASE64.txt, or FILLARY_KEYSTORE_PASSWORD is wrong."
+            exit 1
+          fi
+          if ! keytool -list -keystore "$RUNNER_TEMP/fillary-release.jks" -storepass "$P" -alias "$A" > /dev/null 2>&1; then
+            echo "::error::Key alias '$A' (FILLARY_KEY_ALIAS) is not in this keystore. The keystore contains:"
+            grep -i privatekeyentry "$RUNNER_TEMP/ks.txt" | cut -d, -f1
+            echo "If it shows 'fillary', re-copy FILLARY_KEYSTORE_BASE64 from the updated FILLARY_KEYSTORE_BASE64.txt."
+            exit 1
+          fi
+          echo "Signing key OK: alias $A found."
 
       - name: Build Signed Android App Bundle (.aab)
         if: env.HAS_KEYSTORE == 'true'
         env:
           FILLARY_KEYSTORE_FILE: ${{ runner.temp }}/fillary-release.jks
-          FILLARY_KEYSTORE_PASSWORD: ${{ secrets.FILLARY_KEYSTORE_PASSWORD }}
-          FILLARY_KEY_ALIAS: ${{ secrets.FILLARY_KEY_ALIAS }}
-          FILLARY_KEY_PASSWORD: ${{ secrets.FILLARY_KEY_PASSWORD }}
         run: |
           cd android
           ./gradlew bundleRelease
