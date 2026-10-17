@@ -114,11 +114,11 @@ export class HomePage {
             <div class="active-card-thumb">
               ${activeThumb
                 ? `<div class="active-thumb-wrap" style="position:relative; width:100%; height:100%; border-radius:inherit; overflow:hidden;">
-                     <img src="${activeThumb}" alt="${activePage.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain;" />
-                     ${activePage.imageUrl ? `<img src="${activePage.imageUrl}" alt="${activePage.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
+                     <img loading="lazy" decoding="async" src="${activeThumb}" alt="${activePage.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain;" />
+                     ${activePage.imageUrl ? `<img loading="lazy" decoding="async" src="${activePage.imageUrl}" alt="${activePage.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
                    </div>`
                 : (activePage.imageUrl 
-                    ? `<img src="${activePage.imageUrl}" alt="${activePage.title}" />` 
+                    ? `<img loading="lazy" decoding="async" src="${activePage.imageUrl}" alt="${activePage.title}" />` 
                     : `<div class="active-svg-wrap">${activePage.svgContent || ''}</div>`
                   )
               }
@@ -169,11 +169,11 @@ export class HomePage {
                   <div class="home-card-thumb">
                     ${thumb
                       ? `<div class="home-thumb-composite" style="position:relative; width:100%; height:100%;">
-                           <img src="${thumb}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain;" />
-                           ${page.imageUrl ? `<img src="${page.imageUrl}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
+                           <img loading="lazy" decoding="async" src="${thumb}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain;" />
+                           ${page.imageUrl ? `<img loading="lazy" decoding="async" src="${page.imageUrl}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
                          </div>`
                       : (page.imageUrl 
-                          ? `<img src="${page.imageUrl}" alt="${page.title}" loading="lazy" />` 
+                          ? `<img loading="lazy" decoding="async" src="${page.imageUrl}" alt="${page.title}" />` 
                           : `<div class="home-svg-wrap">${page.svgContent || ''}</div>`
                         )
                     }
@@ -241,6 +241,10 @@ export class HomePage {
             ${Logo.getBrandLockup({ markSize: 26, showSubtitle: true })}
           </div>
           <p class="footer-copy">Designed for mindfulness, creativity, and inner calm.</p>
+          <div class="footer-studio">
+            <img loading="lazy" decoding="async" src="/brand/easybitz-mark.png" alt="" />
+            <span>Made by <strong>EasyBitz Studios</strong></span>
+          </div>
           <div class="footer-links">
             <button class="footer-link" id="footer-privacy-policy">Privacy Policy</button>
             ${AdService.isPrivacyOptionsRequired() ? '<button class="footer-link" id="footer-privacy-settings">Privacy Settings</button>' : ''}

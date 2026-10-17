@@ -12,6 +12,11 @@ import { AdService } from './services/adService.js';
 import { AudioManager } from './audio/audioManager.js';
 import { AudioModal } from './ui/AudioModal.js';
 import { AdBreakCountdown } from './ui/AdBreakCountdown.js';
+import { showStudioIntro } from './ui/StudioIntro.js';
+import { LOW_END } from './services/deviceProfile.js';
+
+// Weak phones: drop costly blur effects (see .lite in theme.css)
+if (LOW_END) document.documentElement.classList.add('lite');
 import { App as CapApp } from '@capacitor/app';
 
 type ViewMode = 'home' | 'studio';
@@ -35,6 +40,8 @@ class App {
 
   private async init(): Promise<void> {
     const appEl = document.getElementById('app')!;
+    // EasyBitz Studios intro plays while the app sets up underneath
+    const intro = showStudioIntro();
     Toast.init();
     AudioManager.initialize();
     await AdService.initialize();
@@ -178,8 +185,8 @@ class App {
     // Default view: Home Page
     this.showHome();
 
-    // One App Open ad on the first launch of each day
-    AdService.showDailyAppOpenAd().catch(() => {});
+    // One App Open ad on the first launch of each day (after the studio intro)
+    intro.then(() => AdService.showDailyAppOpenAd()).catch(() => {});
   }
 
   public getCurrentView(): ViewMode {

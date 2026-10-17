@@ -86,10 +86,10 @@ export class GalleryModal {
               <div class="gallery-thumb-container" style="position:relative; overflow:hidden;">
                 ${thumb
                   ? `<div class="gallery-thumb-composite" style="position:relative; width:100%; height:100%;">
-                       <img src="${thumb}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain;" />
-                       ${page.imageUrl ? `<img src="${page.imageUrl}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
+                       <img loading="lazy" decoding="async" src="${thumb}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain;" />
+                       ${page.imageUrl ? `<img loading="lazy" decoding="async" src="${page.imageUrl}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
                      </div>`
-                  : (page.imageUrl ? `<img src="${page.imageUrl}" alt="${page.title}" class="gallery-thumb-img" />` : (page.svgContent || ''))
+                  : (page.imageUrl ? `<img loading="lazy" decoding="async" src="${page.imageUrl}" alt="${page.title}" class="gallery-thumb-img" />` : (page.svgContent || ''))
                 }
                 ${hasProg ? `<span class="home-card-progress-badge" style="position:absolute; top:8px; right:8px; font-size:10px; padding:3px 8px;">In Progress</span>` : ''}
               </div>

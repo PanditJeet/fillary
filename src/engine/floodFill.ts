@@ -93,6 +93,11 @@ export interface FillDiff {
   indices: Uint32Array;
   before: Uint32Array;
   after: number;
+  /** Bounding box of changed pixels (inclusive), used to redraw only that area. */
+  minX?: number;
+  minY?: number;
+  maxX?: number;
+  maxY?: number;
 }
 
 // Reusable scratch buffers (avoid allocating megabytes on every tap)
@@ -100,7 +105,8 @@ let scratchIdx = new Uint32Array(0);
 let scratchBefore = new Uint32Array(0);
 let scratchTouched = new Uint8Array(0);
 
-function ensureScratch(len: number): void {
+/** Pre-allocates fill buffers (call when a page opens so the first tap is instant). */
+export function ensureScratch(len: number): void {
   if (scratchIdx.length < len) {
     scratchIdx = new Uint32Array(len);
     scratchBefore = new Uint32Array(len);
@@ -251,8 +257,9 @@ export function floodFillDiff(
     }
   }
 
-  // Extend color into invisible gap-seal pixels adjacent to the filled area (max 3px deep)
-  if (gapMask && n > 0) {
+  // Extend color into invisible gap-seal pixels adjacent to the filled area (max 3px deep).
+  // Not needed when tinyRegions are given: those already include every gap pixel.
+  if (gapMask && !tinyRegions && n > 0) {
     const pending: number[] = [];
     for (let pass = 1; pass <= GAP_BLEED_PASSES; pass++) {
       const y0 = Math.max(0, minY - pass);
@@ -284,6 +291,10 @@ export function floodFillDiff(
         touched[i] = 1;
       }
     }
+    minX = Math.max(0, minX - GAP_BLEED_PASSES);
+    minY = Math.max(0, minY - GAP_BLEED_PASSES);
+    maxX = Math.min(width - 1, maxX + GAP_BLEED_PASSES);
+    maxY = Math.min(height - 1, maxY + GAP_BLEED_PASSES);
   }
 
   // Reset scratch "touched" flags for next fill
@@ -294,7 +305,8 @@ export function floodFillDiff(
   return {
     indices: idxBuf.slice(0, n),
     before: beforeBuf.slice(0, n),
-    after: fillColor
+    after: fillColor,
+    minX, minY, maxX, maxY
   };
 }
 

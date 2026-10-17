@@ -2359,3 +2359,108 @@ html, body {
   opacity: 1;
   transform: translate(-50%, 0);
 }
+
+/* ---- EasyBitz Studios intro ---- */
+.studio-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.studio-intro-logo {
+  width: min(62vw, 340px);
+  height: auto;
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 0.45s ease, transform 0.9s ease;
+}
+.studio-intro.studio-intro-in .studio-intro-logo {
+  opacity: 1;
+  transform: scale(1);
+}
+.studio-intro.studio-intro-out {
+  opacity: 0;
+  transition: opacity 0.38s ease;
+}
+
+/* ---- "Made by EasyBitz Studios" footer credit ---- */
+.footer-studio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+.footer-studio img {
+  width: 22px;
+  height: auto;
+  display: block;
+}
+.footer-studio strong {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* ======================================================================
+   LITE MODE (weak phones): same look, without the costly live blur effects.
+   Frosted-glass blurs are re-computed every frame while the canvas moves,
+   which makes panning stutter on low-end GPUs. Solid backgrounds instead.
+   ====================================================================== */
+.lite *,
+.lite *::before,
+.lite *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.lite {
+  --bg-surface: rgba(22, 26, 36, 0.96);
+  --bg-surface-elevated: rgba(30, 35, 48, 0.98);
+}
+.lite .modal-overlay,
+.lite .audio-modal-overlay,
+.lite .ad-simulation-overlay {
+  background: rgba(8, 10, 14, 0.94);
+}
+.lite .home-nav { background: rgba(13, 15, 20, 0.97); }
+.lite .hero-glow-backdrop { filter: none; opacity: 0.35; }
+.lite .hero-logo-emblem,
+.lite .ad-media-icon { animation: none !important; }
+
+/* Off-screen cards skip layout/paint until scrolled near */
+.home-page-card,
+.gallery-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 260px 320px;
+}
+
+/* Respect the system "reduce motion" setting */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Spinner while a picture is being prepared (only shown if it takes a moment) */
+.canvas-container.canvas-loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.18);
+  border-top-color: #7FD3F7;
+  animation: canvasSpin 0.8s linear infinite;
+  pointer-events: none;
+}
+@keyframes canvasSpin {
+  to { transform: rotate(360deg); }
+}

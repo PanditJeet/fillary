@@ -1,5 +1,8 @@
 import { PageMetadata, Point, ViewportTransform } from './types.js';
-import { floodFillDiff, hexToPacked, TinyRegion } from './floodFill.js';
+import { floodFillDiff, hexToPacked, ensureScratch, TinyRegion } from './floodFill.js';
+import { LineArtAnalysis } from './regionAnalysis.js';
+import { prepareLineArt } from './analysisClient.js';
+import { LOW_END } from '../services/deviceProfile.js';
 import { HistoryManager, HistoryEntry } from './history.js';
 import { AudioManager } from '../audio/audioManager.js';
 import { PageProgress } from '../storage/storageManager.js';
@@ -7,6 +10,20 @@ import { PageProgress } from '../storage/storageManager.js';
 const MAX_ZOOM = 6.0;
 /** Minimum number of on-screen pixels of the artwork that must stay visible while panning. */
 const MIN_VISIBLE_PX = 80;
+/** Max device-pixel-ratio for the drawing surface (lower on weak phones = fewer pixels to paint). */
+const MAX_DPR = LOW_END ? 1.5 : 2;
+/** Pre-rendered paper shadow (sprite units; scaled to the paper when drawn). */
+const SHADOW_PAPER = 256;
+const SHADOW_MARGIN = 28;
+const SHADOW_BLUR = 10;
+const SHADOW_OFFSET_Y = 3;
+/** How many recently opened pages keep their prepared artwork in memory (instant re-open). */
+const PAGE_CACHE_SIZE = LOW_END ? 2 : 4;
+
+interface PreparedPage {
+  art: ImageData | null;
+  analysis: LineArtAnalysis;
+}
 
 export class CanvasManager {
   private displayCanvas: HTMLCanvasElement;
@@ -47,7 +64,11 @@ export class CanvasManager {
   private currentColor: string = '#E07A5F';
   private currentPage: PageMetadata | null = null;
   private loadToken = 0;
-  public history: HistoryManager = new HistoryManager();
+  public history: HistoryManager = new HistoryManager(100, (LOW_END ? 24 : 48) * 1024 * 1024);
+  /** Prepared artwork + fill masks of recently opened pages, most recent last. */
+  private pageCache = new Map<string, PreparedPage>();
+  private renderQueued = false;
+  private shadowSprite: HTMLCanvasElement | null = null;
 
   private onTransformChange?: (scale: number) => void;
   private onFillChange?: (actionCount: number) => void;
@@ -109,8 +130,26 @@ export class CanvasManager {
     this.flushColorLayer();
   }
 
-  private flushColorLayer(): void {
-    this.colorCtx.putImageData(this.colorData, 0, 0);
+  /** Copies the color buffer to the color canvas (only the changed rectangle when given). */
+  private flushColorLayer(rect?: { minX?: number; minY?: number; maxX?: number; maxY?: number }): void {
+    if (rect && rect.minX !== undefined && rect.minY !== undefined && rect.maxX !== undefined && rect.maxY !== undefined) {
+      this.colorCtx.putImageData(
+        this.colorData, 0, 0,
+        rect.minX, rect.minY, rect.maxX - rect.minX + 1, rect.maxY - rect.minY + 1
+      );
+    } else {
+      this.colorCtx.putImageData(this.colorData, 0, 0);
+    }
+  }
+
+  /** Coalesces redraws to one per animation frame (smooth panning on slow phones). */
+  private requestRender(): void {
+    if (this.renderQueued) return;
+    this.renderQueued = true;
+    requestAnimationFrame(() => {
+      this.renderQueued = false;
+      this.render();
+    });
   }
 
   public setOnTransformChange(cb: (scale: number) => void): void {
@@ -163,7 +202,7 @@ export class CanvasManager {
       return false; // No significant dimension change
     }
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
     const targetW = Math.round(width * dpr);
     const targetH = Math.round(height * dpr);
 
@@ -258,7 +297,7 @@ export class CanvasManager {
 
     this.clampTransform();
     this.notifyTransform();
-    this.render();
+    this.requestRender();
   }
 
   private panBy(dx: number, dy: number): void {
@@ -266,7 +305,7 @@ export class CanvasManager {
     this.transform.offsetY += dy;
     this.userAdjustedView = true;
     this.clampTransform();
-    this.render();
+    this.requestRender();
   }
 
   /** Keeps at least part of the artwork on screen so it can't be panned out of reach. */
@@ -297,13 +336,9 @@ export class CanvasManager {
   ): Promise<boolean> {
     const token = ++this.loadToken;
 
-    // Load line-art into a temporary canvas first, so a slower earlier load can't overwrite a newer page
-    const art = page.imageUrl
-      ? await this.loadImageFileAsLineArt(page.imageUrl)
-      : page.svgContent
-        ? await this.loadSvgAsLineArt(page.svgContent)
-        : null;
-
+    // Load + analyse the line art (or reuse it if this page was opened recently).
+    // Done before touching the canvas, so a slower earlier load can't overwrite a newer page.
+    const prepared = await this.preparePage(page);
     if (token !== this.loadToken) return false;
 
     this.currentPage = page;
@@ -311,11 +346,13 @@ export class CanvasManager {
     this.color32.fill(this.whitePacked);
 
     this.lineArtCtx.clearRect(0, 0, this.canvasSize, this.canvasSize);
-    if (art) {
-      this.lineArtCtx.putImageData(art, 0, 0);
+    if (prepared.art) {
+      this.lineArtCtx.putImageData(prepared.art, 0, 0);
     }
-
-    this.computeLineArtMask();
+    this.lineArtMask = prepared.analysis.lineArtMask;
+    this.gapMask = prepared.analysis.gapMask;
+    this.tinyRegions = prepared.analysis.tinyRegions;
+    ensureScratch(this.canvasSize * this.canvasSize);
 
     // Restore saved progress if present
     if (savedData) {
@@ -367,6 +404,47 @@ export class CanvasManager {
     return true;
   }
 
+  /** Loads a page's artwork and fill masks, using the recent-pages cache when possible. */
+  private async preparePage(page: PageMetadata): Promise<PreparedPage> {
+    const key = page.id + '|' + (page.imageUrl || '');
+    const cached = this.pageCache.get(key);
+    if (cached) {
+      // Mark as most recently used
+      this.pageCache.delete(key);
+      this.pageCache.set(key, cached);
+      return cached;
+    }
+
+    // Image files are decoded here; converting them to line art happens in the background thread
+    const isImageFile = !!page.imageUrl;
+    const decoded = page.imageUrl
+      ? await this.decodeImageFile(page.imageUrl)
+      : page.svgContent
+        ? await this.loadSvgAsLineArt(page.svgContent)
+        : null;
+
+    // Show a spinner if preparing takes a moment (slow phones); the analysis runs off the main thread
+    const container = this.displayCanvas.parentElement;
+    const spinnerTimer = window.setTimeout(() => container?.classList.add('canvas-loading'), 150);
+    let prepared: PreparedPage;
+    try {
+      const rgba = decoded ? decoded.data : new Uint8ClampedArray(this.canvasSize * this.canvasSize * 4);
+      const result = await prepareLineArt(rgba, this.canvasSize, isImageFile);
+      const art = decoded ? new ImageData(result.rgba as Uint8ClampedArray<ArrayBuffer>, this.canvasSize, this.canvasSize) : null;
+      prepared = { art, analysis: result.analysis };
+    } finally {
+      window.clearTimeout(spinnerTimer);
+      container?.classList.remove('canvas-loading');
+    }
+
+    this.pageCache.set(key, prepared);
+    while (this.pageCache.size > PAGE_CACHE_SIZE) {
+      const oldest = this.pageCache.keys().next().value as string;
+      this.pageCache.delete(oldest);
+    }
+    return prepared;
+  }
+
   private drawToTempCanvas(img: CanvasImageSource): ImageData {
     const tmp = document.createElement('canvas');
     tmp.width = this.canvasSize;
@@ -376,32 +454,15 @@ export class CanvasManager {
     return ctx.getImageData(0, 0, this.canvasSize, this.canvasSize);
   }
 
-  private loadImageFileAsLineArt(url: string): Promise<ImageData> {
+  /** Decodes a picture file to raw RGBA pixels at canvas size. */
+  private decodeImageFile(url: string): Promise<ImageData> {
     return new Promise((resolve, reject) => {
       const img = new Image();
+      img.decoding = 'async';
       if (url.startsWith('http://') || url.startsWith('https://')) {
         img.crossOrigin = 'anonymous';
       }
-
-      img.onload = () => {
-        // Convert light/white background pixels to transparent so colors underneath show through.
-        // Keep linework bold and solid.
-        const imgData = this.drawToTempCanvas(img);
-        const d = imgData.data;
-        for (let i = 0; i < d.length; i += 4) {
-          const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-          if (lum > 225) {
-            d[i + 3] = 0;
-          } else {
-            d[i] = 18;
-            d[i + 1] = 18;
-            d[i + 2] = 18;
-            d[i + 3] = 255;
-          }
-        }
-        resolve(imgData);
-      };
-
+      img.onload = () => resolve(this.drawToTempCanvas(img));
       img.onerror = () => reject(new Error(`Could not load artwork: ${url}`));
       img.src = url;
     });
@@ -432,228 +493,6 @@ export class CanvasManager {
 
       img.src = url;
     });
-  }
-
-  private computeLineArtMask(): void {
-    const imgData = this.lineArtCtx.getImageData(0, 0, this.canvasSize, this.canvasSize);
-    const data = imgData.data;
-    const len = this.canvasSize * this.canvasSize;
-    const rawMask = new Uint8Array(len);
-
-    for (let i = 0; i < len; i++) {
-      const idx = i * 4;
-      const a = data[idx + 3];
-      // Opaque/semi-opaque and sufficiently dark (lum <= 225) = visible line
-      if (a > 50 && (0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]) <= 225) {
-        rawMask[i] = 1;
-      }
-    }
-
-    // Morphological micro-gap and diagonal seal pass.
-    // Bridges 1-3 pixel gaps and diagonal steps so the fill never leaks between distinct objects.
-    // Bridged pixels go into gapMask: they block the fill but are colored together with the area they touch.
-    const width = this.canvasSize;
-    const height = this.canvasSize;
-
-    for (let y = 0; y < height; y++) {
-      const yOffset = y * width;
-      for (let x = 0; x < width; x++) {
-        const idx = yOffset + x;
-        if (rawMask[idx] === 1) {
-          this.lineArtMask[idx] = 1;
-          this.gapMask[idx] = 0;
-          continue;
-        }
-
-        const left = x > 0 && rawMask[idx - 1] === 1;
-        const right = x < width - 1 && rawMask[idx + 1] === 1;
-        const up = y > 0 && rawMask[idx - width] === 1;
-        const down = y < height - 1 && rawMask[idx + width] === 1;
-
-        const hGap = left && right;
-        const vGap = up && down;
-        const diagCorner = (left && up) || (right && up) || (left && down) || (right && down);
-
-        const diag1 = (x > 0 && y > 0 && rawMask[idx - width - 1] === 1) && (x < width - 1 && y < height - 1 && rawMask[idx + width + 1] === 1);
-        const diag2 = (x < width - 1 && y > 0 && rawMask[idx - width + 1] === 1) && (x > 0 && y < height - 1 && rawMask[idx + width - 1] === 1);
-
-        const left2 = x > 1 && rawMask[idx - 2] === 1;
-        const right2 = x < width - 2 && rawMask[idx + 2] === 1;
-        const up2 = y > 1 && rawMask[idx - width * 2] === 1;
-        const down2 = y < height - 2 && rawMask[idx + width * 2] === 1;
-        const hGap2 = (left && right2) || (left2 && right);
-        const vGap2 = (up && down2) || (up2 && down);
-
-        const left3 = x > 2 && rawMask[idx - 3] === 1;
-        const right3 = x < width - 3 && rawMask[idx + 3] === 1;
-        const up3 = y > 2 && rawMask[idx - width * 3] === 1;
-        const down3 = y < height - 3 && rawMask[idx + width * 3] === 1;
-        const hGap3 = (left && right3) || (left2 && right2) || (left3 && right);
-        const vGap3 = (up && down3) || (up2 && down2) || (up3 && down);
-
-        const sealed = hGap || vGap || diagCorner || diag1 || diag2 || hGap2 || vGap2 || hGap3 || vGap3;
-        this.lineArtMask[idx] = sealed ? 1 : 0;
-        this.gapMask[idx] = sealed ? 1 : 0;
-      }
-    }
-
-    this.computeTinyRegions(rawMask);
-  }
-
-  /**
-   * Links every "orphan" pixel to the real colorable area it belongs to, so it gets
-   * colored together with that area. Orphans are pixels that are not visible line but
-   * can never be filled by a tap:
-   *  - gap-seal pixels (narrow strips between close lines, sealed to stop leaks), and
-   *  - tiny enclosed pockets (≤ TINY_MAX_AREA px), e.g. slivers where strokes meet.
-   * Each orphan goes to the nearest large area reachable without crossing a visible
-   * line; pockets fully enclosed by thin lines (≤ ORPHAN_MAX_LINE px) go to the nearest
-   * area across that line. Pockets behind thick outlines (e.g. eye shines) are left alone.
-   */
-  private computeTinyRegions(rawMask: Uint8Array): void {
-    const TINY_MAX_AREA = 80;
-    const ORPHAN_MAX_LINE = 6;
-    const W = this.canvasSize, N = W * W, mask = this.lineArtMask;
-
-    // 1. Label fillable regions (4-connected)
-    const labels = new Int32Array(N);
-    const areas: number[] = [0];
-    const stack = new Int32Array(N);
-    let count = 0;
-    for (let i = 0; i < N; i++) {
-      if (mask[i] || labels[i]) continue;
-      count++;
-      let sp = 0, area = 0;
-      stack[sp++] = i;
-      labels[i] = count;
-      while (sp > 0) {
-        const p = stack[--sp];
-        area++;
-        const x = p % W;
-        if (x > 0 && !mask[p - 1] && !labels[p - 1]) { labels[p - 1] = count; stack[sp++] = p - 1; }
-        if (x < W - 1 && !mask[p + 1] && !labels[p + 1]) { labels[p + 1] = count; stack[sp++] = p + 1; }
-        if (p >= W && !mask[p - W] && !labels[p - W]) { labels[p - W] = count; stack[sp++] = p - W; }
-        if (p < N - W && !mask[p + W] && !labels[p + W]) { labels[p + W] = count; stack[sp++] = p + W; }
-      }
-      areas.push(area);
-    }
-    const isBig = (l: number) => l > 0 && areas[l] > TINY_MAX_AREA;
-
-    // Small but round shapes (e.g. flower petals) stay their own tappable areas:
-    // a tiny region counts as "round" if it contains a full 5x5 block of its own pixels.
-    const round = new Uint8Array(areas.length);
-    for (let i = 0; i < N; i++) {
-      const l = labels[i];
-      if (!l || isBig(l) || round[l]) continue;
-      const x = i % W, y = (i / W) | 0;
-      if (x < 2 || y < 2 || x > W - 3 || y > W - 3) continue;
-      let full = true;
-      for (let dy = -2; dy <= 2 && full; dy++) {
-        const row = i + dy * W;
-        for (let dx = -2; dx <= 2; dx++) {
-          if (labels[row + dx] !== l) { full = false; break; }
-        }
-      }
-      if (full) round[l] = 1;
-    }
-
-    // 2. owner[i] = big region an orphan pixel is assigned to (0 = not yet)
-    const owner = new Int32Array(N);
-    const isOrphan = (i: number) => !rawMask[i] && !isBig(labels[i]) && !round[labels[i]];
-
-    // 3. Multi-source BFS from big regions into orphan pixels, never crossing visible lines
-    let queue = new Int32Array(N);
-    let qh = 0, qt = 0;
-    for (let i = 0; i < N; i++) {
-      const l = labels[i];
-      if (!isBig(l)) continue;
-      const x = i % W;
-      if ((x > 0 && isOrphan(i - 1)) || (x < W - 1 && isOrphan(i + 1)) ||
-          (i >= W && isOrphan(i - W)) || (i < N - W && isOrphan(i + W))) {
-        owner[i] = l;
-        queue[qt++] = i;
-      }
-    }
-    while (qh < qt) {
-      const p = queue[qh++];
-      const l = owner[p];
-      const x = p % W;
-      const nbs = [x > 0 ? p - 1 : -1, x < W - 1 ? p + 1 : -1, p >= W ? p - W : -1, p < N - W ? p + W : -1];
-      for (const q of nbs) {
-        if (q < 0 || owner[q] || !isOrphan(q)) continue;
-        owner[q] = l;
-        queue[qt++] = q;
-      }
-    }
-
-    // 4. Orphan groups still unassigned are enclosed by visible line: look across thin lines
-    const seen = new Uint32Array(N);
-    let stamp = 0;
-    for (let i = 0; i < N; i++) {
-      if (owner[i] || !isOrphan(i)) continue;
-      // collect this unassigned orphan group
-      const group: number[] = [];
-      let sp = 0;
-      stack[sp++] = i;
-      owner[i] = -1;
-      while (sp > 0) {
-        const p = stack[--sp];
-        group.push(p);
-        const x = p % W;
-        const nbs = [x > 0 ? p - 1 : -1, x < W - 1 ? p + 1 : -1, p >= W ? p - W : -1, p < N - W ? p + W : -1];
-        for (const q of nbs) {
-          if (q < 0 || owner[q] || !isOrphan(q)) continue;
-          owner[q] = -1;
-          stack[sp++] = q;
-        }
-      }
-      if (group.length > TINY_MAX_AREA * 4) continue; // large enclosed areas stay independent
-      stamp++;
-      let frontier: number[] = [];
-      for (const p of group) { seen[p] = stamp; frontier.push(p); }
-      const votes = new Map<number, number>();
-      for (let depth = 0; depth <= ORPHAN_MAX_LINE && votes.size === 0 && frontier.length; depth++) {
-        const next: number[] = [];
-        for (const p of frontier) {
-          const x = p % W;
-          const nbs = [x > 0 ? p - 1 : -1, x < W - 1 ? p + 1 : -1, p >= W ? p - W : -1, p < N - W ? p + W : -1];
-          for (const q of nbs) {
-            if (q < 0 || seen[q] === stamp) continue;
-            seen[q] = stamp;
-            const o = owner[q] > 0 ? owner[q] : (isBig(labels[q]) ? labels[q] : 0);
-            if (o) votes.set(o, (votes.get(o) || 0) + 1);
-            else if (rawMask[q]) next.push(q); // walk through the line
-          }
-        }
-        frontier = next;
-      }
-      if (votes.size === 0) continue;
-      let best = 0, bestN = -1;
-      for (const [l, n] of votes) if (n > bestN) { best = l; bestN = n; }
-      for (const p of group) owner[p] = best;
-    }
-
-    // 5. Group orphan pixels per region (only pixels that are not part of the region itself)
-    const perRegion = new Map<number, number[]>();
-    const anchorOf = new Map<number, number>();
-    for (let i = 0; i < N; i++) {
-      const l = labels[i];
-      if (isBig(l) && !anchorOf.has(l)) anchorOf.set(l, i);
-      const o = owner[i];
-      if (o > 0 && !(labels[i] === o)) {
-        let arr = perRegion.get(o);
-        if (!arr) { arr = []; perRegion.set(o, arr); }
-        arr.push(i);
-      }
-    }
-    const result: TinyRegion[] = [];
-    for (const [l, pixels] of perRegion) {
-      const anchor = anchorOf.get(l);
-      if (anchor === undefined) continue;
-      result.push({ anchor, pixels: Uint32Array.from(pixels) });
-    }
-    queue = new Int32Array(0);
-    this.tinyRegions = result;
   }
 
   /**
@@ -688,7 +527,7 @@ export class CanvasManager {
       }
     });
 
-    this.flushColorLayer();
+    this.flushColorLayer(diff);
     this.render();
     AudioManager.playFillSound();
     this.onFillChange?.(this.history.actionCount);
@@ -703,7 +542,7 @@ export class CanvasManager {
     } else {
       for (let k = 0; k < indices.length; k++) c[indices[k]] = after;
     }
-    this.flushColorLayer();
+    this.flushColorLayer(entry);
     this.render();
     this.onFillChange?.(this.history.actionCount);
   }
@@ -731,7 +570,7 @@ export class CanvasManager {
    */
   public render(): void {
     const rect = this.displayCanvas.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
 
     this.displayCtx.save();
     this.displayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -742,19 +581,37 @@ export class CanvasManager {
     this.displayCtx.translate(this.transform.offsetX, this.transform.offsetY);
     this.displayCtx.scale(this.transform.scale, this.transform.scale);
 
-    // Drop shadow behind paper canvas
-    this.displayCtx.save();
-    this.displayCtx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-    this.displayCtx.shadowBlur = 35 / this.transform.scale;
-    this.displayCtx.shadowOffsetY = 12 / this.transform.scale;
+    // Drop shadow + paper (pre-rendered shadow image: no per-frame blur, much cheaper on weak phones)
+    const sprite = this.getShadowSprite();
+    const k = this.canvasSize / SHADOW_PAPER;
+    this.displayCtx.drawImage(
+      sprite,
+      -SHADOW_MARGIN * k, (-SHADOW_MARGIN + SHADOW_OFFSET_Y) * k,
+      sprite.width * k, sprite.height * k
+    );
     this.displayCtx.fillStyle = '#FFFFFF';
     this.displayCtx.fillRect(0, 0, this.canvasSize, this.canvasSize);
-    this.displayCtx.restore();
 
     this.displayCtx.drawImage(this.colorCanvas, 0, 0);
     this.displayCtx.drawImage(this.lineArtCanvas, 0, 0);
 
     this.displayCtx.restore();
+  }
+
+  /** Builds the soft drop-shadow image once. */
+  private getShadowSprite(): HTMLCanvasElement {
+    if (this.shadowSprite) return this.shadowSprite;
+    const c = document.createElement('canvas');
+    c.width = c.height = SHADOW_PAPER + SHADOW_MARGIN * 2;
+    const ctx = c.getContext('2d')!;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+    ctx.shadowBlur = SHADOW_BLUR;
+    ctx.fillStyle = '#000';
+    // Draw the rect off-canvas and offset its shadow back in, so only the shadow remains
+    ctx.shadowOffsetX = c.width;
+    ctx.fillRect(SHADOW_MARGIN - c.width, SHADOW_MARGIN, SHADOW_PAPER, SHADOW_PAPER);
+    this.shadowSprite = c;
+    return c;
   }
 
   /**
