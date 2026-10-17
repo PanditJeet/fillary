@@ -19,8 +19,8 @@ self.onmessage = (e: MessageEvent<{ id: number; rgba: Uint8ClampedArray; size: n
     const pixels = new Uint32Array(total);
     for (let i = 0; i < k; i++) pixels.set(r.tinyRegions[i].pixels, offsets[i]);
     (self as unknown as Worker).postMessage(
-      { id, ok: true, rgba, lineArtMask: r.lineArtMask, gapMask: r.gapMask, anchors, offsets, pixels },
-      [rgba.buffer, r.lineArtMask.buffer, r.gapMask.buffer, anchors.buffer, offsets.buffer, pixels.buffer]
+      { id, ok: true, rgba, lineArtMask: r.lineArtMask, gapMask: r.gapMask, labels: r.labels, anchors, offsets, pixels },
+      [rgba.buffer, r.lineArtMask.buffer, r.gapMask.buffer, r.labels.buffer, anchors.buffer, offsets.buffer, pixels.buffer]
     );
   } catch (err) {
     (self as unknown as Worker).postMessage({ id, ok: false, error: String(err) });

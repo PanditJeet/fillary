@@ -27,7 +27,7 @@ function getWorker(): Worker | null {
       for (let i = 0; i < d.anchors.length; i++) {
         tinyRegions.push({ anchor: d.anchors[i], pixels: d.pixels.subarray(d.offsets[i], d.offsets[i + 1]) });
       }
-      job.resolve({ rgba: d.rgba, analysis: { lineArtMask: d.lineArtMask, gapMask: d.gapMask, tinyRegions } });
+      job.resolve({ rgba: d.rgba, analysis: { lineArtMask: d.lineArtMask, gapMask: d.gapMask, tinyRegions, labels: d.labels } });
     };
     worker.onerror = () => {
       // Worker unavailable (e.g. very old WebView): fail pending jobs over to the main thread

@@ -12,7 +12,7 @@ import { AdService } from './services/adService.js';
 import { AudioManager } from './audio/audioManager.js';
 import { AudioModal } from './ui/AudioModal.js';
 import { AdBreakCountdown } from './ui/AdBreakCountdown.js';
-import { showStudioIntro } from './ui/StudioIntro.js';
+import { showStudioIntro, studioIntroActive } from './ui/StudioIntro.js';
 import { LOW_END } from './services/deviceProfile.js';
 
 // Weak phones: drop costly blur effects (see .lite in theme.css)
@@ -127,6 +127,8 @@ class App {
         }).catch(() => {});
 
         CapApp.addListener('backButton', () => {
+          // Ignore Back while the studio logo is showing
+          if (studioIntroActive) return;
           // Close the top-most overlay first, then leave the studio, then exit
           if (document.querySelector('.ad-simulation-overlay')) {
             return;

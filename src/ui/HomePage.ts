@@ -1,4 +1,5 @@
 import { PageMetadata } from '../engine/types.js';
+import { thumbUrl } from '../pages/thumbs.js';
 import { PAGES } from '../pages/pageCatalog.js';
 import { StorageManager } from '../storage/storageManager.js';
 import { Logo } from './Logo.js';
@@ -115,10 +116,10 @@ export class HomePage {
               ${activeThumb
                 ? `<div class="active-thumb-wrap" style="position:relative; width:100%; height:100%; border-radius:inherit; overflow:hidden;">
                      <img loading="lazy" decoding="async" src="${activeThumb}" alt="${activePage.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain;" />
-                     ${activePage.imageUrl ? `<img loading="lazy" decoding="async" src="${activePage.imageUrl}" alt="${activePage.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
+                     ${activePage.imageUrl ? `<img loading="lazy" decoding="async" src="${thumbUrl(activePage.imageUrl)}" alt="${activePage.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
                    </div>`
                 : (activePage.imageUrl 
-                    ? `<img loading="lazy" decoding="async" src="${activePage.imageUrl}" alt="${activePage.title}" />` 
+                    ? `<img loading="lazy" decoding="async" src="${thumbUrl(activePage.imageUrl)}" alt="${activePage.title}" />` 
                     : `<div class="active-svg-wrap">${activePage.svgContent || ''}</div>`
                   )
               }
@@ -170,10 +171,10 @@ export class HomePage {
                     ${thumb
                       ? `<div class="home-thumb-composite" style="position:relative; width:100%; height:100%;">
                            <img loading="lazy" decoding="async" src="${thumb}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain;" />
-                           ${page.imageUrl ? `<img loading="lazy" decoding="async" src="${page.imageUrl}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
+                           ${page.imageUrl ? `<img loading="lazy" decoding="async" src="${thumbUrl(page.imageUrl)}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
                          </div>`
                       : (page.imageUrl 
-                          ? `<img loading="lazy" decoding="async" src="${page.imageUrl}" alt="${page.title}" />` 
+                          ? `<img loading="lazy" decoding="async" src="${thumbUrl(page.imageUrl)}" alt="${page.title}" />` 
                           : `<div class="home-svg-wrap">${page.svgContent || ''}</div>`
                         )
                     }

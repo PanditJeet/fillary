@@ -1,4 +1,5 @@
 import { PAGES, ANIMAL_PAGES, MYSTICAL_PAGES } from '../pages/pageCatalog.js';
+import { thumbUrl } from '../pages/thumbs.js';
 import { HUMAN_CARTOON_PAGES } from '../pages/humanCartoons.js';
 import { PageMetadata } from '../engine/types.js';
 import { StorageManager } from '../storage/storageManager.js';
@@ -87,9 +88,9 @@ export class GalleryModal {
                 ${thumb
                   ? `<div class="gallery-thumb-composite" style="position:relative; width:100%; height:100%;">
                        <img loading="lazy" decoding="async" src="${thumb}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain;" />
-                       ${page.imageUrl ? `<img loading="lazy" decoding="async" src="${page.imageUrl}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
+                       ${page.imageUrl ? `<img loading="lazy" decoding="async" src="${thumbUrl(page.imageUrl)}" alt="${page.title}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; mix-blend-mode:multiply;" />` : ''}
                      </div>`
-                  : (page.imageUrl ? `<img loading="lazy" decoding="async" src="${page.imageUrl}" alt="${page.title}" class="gallery-thumb-img" />` : (page.svgContent || ''))
+                  : (page.imageUrl ? `<img loading="lazy" decoding="async" src="${thumbUrl(page.imageUrl)}" alt="${page.title}" class="gallery-thumb-img" />` : (page.svgContent || ''))
                 }
                 ${hasProg ? `<span class="home-card-progress-badge" style="position:absolute; top:8px; right:8px; font-size:10px; padding:3px 8px;">In Progress</span>` : ''}
               </div>

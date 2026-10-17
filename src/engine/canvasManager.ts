@@ -1,5 +1,5 @@
 import { PageMetadata, Point, ViewportTransform } from './types.js';
-import { floodFillDiff, hexToPacked, ensureScratch, TinyRegion } from './floodFill.js';
+import { floodFillDiff, hexToPacked, ensureScratch, findNearestFillablePixel, TinyRegion } from './floodFill.js';
 import { LineArtAnalysis } from './regionAnalysis.js';
 import { prepareLineArt } from './analysisClient.js';
 import { LOW_END } from '../services/deviceProfile.js';
@@ -19,6 +19,8 @@ const SHADOW_BLUR = 10;
 const SHADOW_OFFSET_Y = 3;
 /** How many recently opened pages keep their prepared artwork in memory (instant re-open). */
 const PAGE_CACHE_SIZE = LOW_END ? 2 : 4;
+/** When re-opening a page, only this many most recent fills are replayed (and undoable). */
+const UNDOABLE_ON_REOPEN = LOW_END ? 30 : 50;
 
 interface PreparedPage {
   art: ImageData | null;
@@ -42,6 +44,8 @@ export class CanvasManager {
   private gapMask: Uint8Array = new Uint8Array(1024 * 1024);
   /** Tiny untappable pockets between strokes, colored together with the area they border. */
   private tinyRegions: TinyRegion[] = [];
+  /** Fill-area id per pixel for the current page (fast restore of saved coloring). */
+  private regionLabels: Uint32Array = new Uint32Array(0);
 
   /** Source of truth for the color layer (avoids getImageData on every tap). */
   private colorData: ImageData;
@@ -352,6 +356,7 @@ export class CanvasManager {
     this.lineArtMask = prepared.analysis.lineArtMask;
     this.gapMask = prepared.analysis.gapMask;
     this.tinyRegions = prepared.analysis.tinyRegions;
+    this.regionLabels = prepared.analysis.labels;
     ensureScratch(this.canvasSize * this.canvasSize);
 
     // Restore saved progress if present
@@ -361,25 +366,7 @@ export class CanvasManager {
       const actions = isProgressObj ? progress!.actions : (savedData as Array<{ x: number; y: number; color: string }>);
 
       if (actions && actions.length > 0) {
-        // Replay fills in order to rebuild the artwork and its undo history
-        for (const act of actions) {
-          const action = {
-            pageId: page.id,
-            x: act.x,
-            y: act.y,
-            color: act.color,
-            timestamp: (act as { timestamp?: number }).timestamp || Date.now()
-          };
-          const diff = floodFillDiff(
-            this.color32, this.canvasSize, this.canvasSize,
-            this.lineArtMask, act.x, act.y, hexToPacked(act.color), this.gapMask, this.tinyRegions
-          );
-          if (diff) {
-            this.history.push({ ...diff, action }, false);
-          }
-          // Fills that change nothing on replay are dropped (they were no-ops)
-        }
-        this.history.notify();
+        this.restoreActions(page.id, actions);
       } else if (progress && progress.dataUrl) {
         // Legacy raster-only save: draw it as the starting point (not undoable)
         this.flushColorLayer();
@@ -402,6 +389,68 @@ export class CanvasManager {
     this.fitToScreen();
     this.render();
     return true;
+  }
+
+  /**
+   * Rebuilds saved coloring quickly. Every fill colors one whole area, so the result
+   * only depends on each area's LAST color: older fills are painted area-by-area in a
+   * single pass (instead of re-running hundreds of flood fills), and only the most recent
+   * fills are replayed normally so they stay undoable.
+   */
+  private restoreActions(pageId: string, actions: Array<{ x: number; y: number; color: string; timestamp?: number }>): void {
+    const W = this.canvasSize;
+    const labels = this.regionLabels;
+    const split = Math.max(0, actions.length - UNDOABLE_ON_REOPEN);
+    const toAction = (act: { x: number; y: number; color: string; timestamp?: number }) => ({
+      pageId, x: act.x, y: act.y, color: act.color, timestamp: act.timestamp || Date.now()
+    });
+
+    if (split > 0 && labels.length === W * W) {
+      // 1. Simulate the older fills on area ids only (cheap), keeping the ones that changed something
+      let maxLabel = 0;
+      for (let i = 0; i < labels.length; i++) if (labels[i] > maxLabel) maxLabel = labels[i];
+      const areaColor = new Uint32Array(maxLabel + 1).fill(this.whitePacked);
+      const lastFill = new Int32Array(maxLabel + 1).fill(-1); // when each area was last colored
+      for (let k = 0; k < split; k++) {
+        const act = actions[k];
+        const pt = findNearestFillablePixel(act.x, act.y, W, W, this.lineArtMask, 5);
+        if (!pt) continue;
+        const l = labels[pt.y * W + pt.x];
+        const c = hexToPacked(act.color);
+        if (!l || areaColor[l] === c) continue; // no-op fill: drop it, like a normal replay would
+        areaColor[l] = c;
+        lastFill[l] = k;
+        this.history.pushActionOnly(toAction(act));
+      }
+      // 2. Paint every area (and the tiny pockets / gap seals that belong to it) once
+      const c32 = this.color32;
+      for (let i = 0; i < c32.length; i++) {
+        const l = labels[i];
+        if (l) c32[i] = areaColor[l];
+      }
+      // A tiny pocket takes its owner's color, unless it was tapped directly more recently
+      for (const t of this.tinyRegions) {
+        const owner = labels[t.anchor];
+        const col = areaColor[owner];
+        const when = lastFill[owner];
+        if (when < 0) continue;
+        const px = t.pixels;
+        for (let k = 0; k < px.length; k++) {
+          const own = labels[px[k]];
+          if (!own || lastFill[own] < when) c32[px[k]] = col;
+        }
+      }
+    }
+
+    // 3. Replay the most recent fills normally so they can be undone
+    for (let k = split > 0 && labels.length === W * W ? split : 0; k < actions.length; k++) {
+      const act = actions[k];
+      const diff = floodFillDiff(
+        this.color32, W, W, this.lineArtMask, act.x, act.y, hexToPacked(act.color), this.gapMask, this.tinyRegions
+      );
+      if (diff) this.history.push({ ...diff, action: toAction(act) }, false);
+    }
+    this.history.notify();
   }
 
   /** Loads a page's artwork and fill masks, using the recent-pages cache when possible. */

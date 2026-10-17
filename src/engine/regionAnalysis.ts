@@ -10,6 +10,8 @@ export interface LineArtAnalysis {
   gapMask: Uint8Array;
   /** Orphan pixels (gap seals, tiny pockets) grouped by the large area they get colored with. */
   tinyRegions: TinyRegion[];
+  /** Fill-area id of every pixel (0 = line / gap seal). Used to restore saved coloring fast. */
+  labels: Uint32Array;
 }
 
 const TINY_MAX_AREA = 80;
@@ -86,11 +88,9 @@ export function analyzeLineArt(rgba: Uint8ClampedArray, size: number): LineArtAn
     }
   }
 
-  return {
-    lineArtMask,
-    gapMask,
-    tinyRegions: computeTinyRegions(lineArtMask, rawMask, W)
-  };
+  const labels = new Uint32Array(N);
+  const tinyRegions = computeTinyRegions(lineArtMask, rawMask, W, labels);
+  return { lineArtMask, gapMask, tinyRegions, labels };
 }
 
 /**
@@ -104,7 +104,7 @@ export function analyzeLineArt(rgba: Uint8ClampedArray, size: number): LineArtAn
  * Works on a grid with a 1px wall border (G = W + 2) so neighbour lookups need no
  * bounds checks or divisions — this is the hot path when a page opens.
  */
-function computeTinyRegions(mask: Uint8Array, rawMask: Uint8Array, W: number): TinyRegion[] {
+function computeTinyRegions(mask: Uint8Array, rawMask: Uint8Array, W: number, labelsOut: Uint32Array): TinyRegion[] {
   const G = W + 2;
   const NG = G * G;
 
@@ -258,6 +258,7 @@ function computeTinyRegions(mask: Uint8Array, rawMask: Uint8Array, W: number): T
     for (let x = 1; x <= W; x++) {
       const i = row + x;
       const l = labels[i];
+      labelsOut[outRow + x] = l;
       if (big[l] && anchor[l] < 0) anchor[l] = outRow + x;
       const o = owner[i];
       if (o > 0 && l !== o) counts[o]++;
