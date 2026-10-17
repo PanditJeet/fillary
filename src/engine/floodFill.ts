@@ -112,6 +112,16 @@ function ensureScratch(len: number): void {
 const GAP_BLEED_PASSES = 3;
 
 /**
+ * A tiny enclosed pocket (e.g. the sliver where two thin strokes meet) that is too small
+ * to tap. It is colored together with the larger area it borders (`anchor` is a pixel
+ * in that area).
+ */
+export interface TinyRegion {
+  anchor: number;
+  pixels: Uint32Array;
+}
+
+/**
  * Scanline flood fill on a packed 32-bit color buffer, respecting the line-art mask.
  *
  * `gapMask` marks pixels that block the fill (to seal tiny gaps in the line art)
@@ -128,7 +138,8 @@ export function floodFillDiff(
   startX: number,
   startY: number,
   fillColor: number,
-  gapMask?: Uint8Array
+  gapMask?: Uint8Array,
+  tinyRegions?: TinyRegion[]
 ): FillDiff | null {
   const validPoint = findNearestFillablePixel(startX, startY, width, height, lineArtMask, 5);
   if (!validPoint) return null;
@@ -218,6 +229,28 @@ export function floodFillDiff(
     }
   }
 
+  // Color tiny pockets that belong to the area just filled
+  if (tinyRegions && n > 0) {
+    for (const t of tinyRegions) {
+      if (touched[t.anchor] !== 1) continue;
+      const px = t.pixels;
+      for (let k = 0; k < px.length; k++) {
+        const i = px[k];
+        if (touched[i] === 1) continue;
+        idxBuf[n] = i;
+        beforeBuf[n] = color32[i];
+        n++;
+        color32[i] = fillColor;
+        touched[i] = 1;
+        const x = i % width, y = (i / width) | 0;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
   // Extend color into invisible gap-seal pixels adjacent to the filled area (max 3px deep)
   if (gapMask && n > 0) {
     const pending: number[] = [];
@@ -275,7 +308,8 @@ export function scanlineFloodFill(
   startX: number,
   startY: number,
   newColorHex: string,
-  gapMask?: Uint8Array
+  gapMask?: Uint8Array,
+  tinyRegions?: TinyRegion[]
 ): boolean {
   const color32 = new Uint32Array(
     colorImageData.data.buffer,
@@ -290,6 +324,7 @@ export function scanlineFloodFill(
     startX,
     startY,
     hexToPacked(newColorHex),
-    gapMask
+    gapMask,
+    tinyRegions
   ) !== null;
 }

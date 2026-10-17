@@ -1,5 +1,5 @@
 import { PageMetadata, Point, ViewportTransform } from './types.js';
-import { floodFillDiff, hexToPacked } from './floodFill.js';
+import { floodFillDiff, hexToPacked, TinyRegion } from './floodFill.js';
 import { HistoryManager, HistoryEntry } from './history.js';
 import { AudioManager } from '../audio/audioManager.js';
 import { PageProgress } from '../storage/storageManager.js';
@@ -23,6 +23,8 @@ export class CanvasManager {
   private lineArtMask: Uint8Array = new Uint8Array(1024 * 1024);
   /** Invisible gap-seal pixels: block the fill but get colored alongside the adjacent area. */
   private gapMask: Uint8Array = new Uint8Array(1024 * 1024);
+  /** Tiny untappable pockets between strokes, colored together with the area they border. */
+  private tinyRegions: TinyRegion[] = [];
 
   /** Source of truth for the color layer (avoids getImageData on every tap). */
   private colorData: ImageData;
@@ -333,7 +335,7 @@ export class CanvasManager {
           };
           const diff = floodFillDiff(
             this.color32, this.canvasSize, this.canvasSize,
-            this.lineArtMask, act.x, act.y, hexToPacked(act.color), this.gapMask
+            this.lineArtMask, act.x, act.y, hexToPacked(act.color), this.gapMask, this.tinyRegions
           );
           if (diff) {
             this.history.push({ ...diff, action }, false);
@@ -494,6 +496,90 @@ export class CanvasManager {
         this.gapMask[idx] = sealed ? 1 : 0;
       }
     }
+
+    this.computeTinyRegions();
+  }
+
+  /**
+   * Finds tiny enclosed pockets (≤ TINY_MAX_AREA px) — typically slivers where thin strokes
+   * meet or pockets created by gap sealing — and links each to the large area it borders
+   * across a thin line (≤ TINY_MAX_LINE px). Filling that area then colors the pocket too,
+   * so no white specks are left behind. Pockets behind thick outlines (e.g. eye highlights)
+   * are not linked and stay as they are.
+   */
+  private computeTinyRegions(): void {
+    const TINY_MAX_AREA = 80;
+    const TINY_MAX_LINE = 5;
+    const W = this.canvasSize, N = W * W, mask = this.lineArtMask;
+
+    // 1. Label fillable regions (4-connected)
+    const labels = new Int32Array(N);
+    const areas: number[] = [0];
+    const stack = new Int32Array(N);
+    let count = 0;
+    for (let i = 0; i < N; i++) {
+      if (mask[i] || labels[i]) continue;
+      count++;
+      let sp = 0, area = 0;
+      stack[sp++] = i;
+      labels[i] = count;
+      while (sp > 0) {
+        const p = stack[--sp];
+        area++;
+        const x = p % W;
+        if (x > 0 && !mask[p - 1] && !labels[p - 1]) { labels[p - 1] = count; stack[sp++] = p - 1; }
+        if (x < W - 1 && !mask[p + 1] && !labels[p + 1]) { labels[p + 1] = count; stack[sp++] = p + 1; }
+        if (p >= W && !mask[p - W] && !labels[p - W]) { labels[p - W] = count; stack[sp++] = p - W; }
+        if (p < N - W && !mask[p + W] && !labels[p + W]) { labels[p + W] = count; stack[sp++] = p + W; }
+      }
+      areas.push(area);
+    }
+
+    // 2. Collect pixels of tiny regions
+    const tinyPixels = new Map<number, number[]>();
+    for (let i = 0; i < N; i++) {
+      const l = labels[i];
+      if (l && areas[l] <= TINY_MAX_AREA) {
+        let arr = tinyPixels.get(l);
+        if (!arr) { arr = []; tinyPixels.set(l, arr); }
+        arr.push(i);
+      }
+    }
+
+    // 3. For each tiny region, search outward through line pixels for the nearest large region
+    const result: TinyRegion[] = [];
+    const seen = new Uint32Array(N); // visit stamp per tiny region
+    let stamp = 0;
+    for (const [, pixels] of tinyPixels) {
+      stamp++;
+      let frontier: number[] = [];
+      for (const p of pixels) { seen[p] = stamp; frontier.push(p); }
+      const votes = new Map<number, { n: number; anchor: number }>();
+      for (let depth = 0; depth < TINY_MAX_LINE + 1 && votes.size === 0 && frontier.length; depth++) {
+        const next: number[] = [];
+        for (const p of frontier) {
+          const x = p % W;
+          const nbs = [x > 0 ? p - 1 : -1, x < W - 1 ? p + 1 : -1, p >= W ? p - W : -1, p < N - W ? p + W : -1];
+          for (const q of nbs) {
+            if (q < 0 || seen[q] === stamp) continue;
+            seen[q] = stamp;
+            const l = labels[q];
+            if (l && areas[l] > TINY_MAX_AREA) {
+              const v = votes.get(l);
+              if (v) v.n++; else votes.set(l, { n: 1, anchor: q });
+            } else if (mask[q]) {
+              next.push(q); // keep walking through the line
+            }
+          }
+        }
+        frontier = next;
+      }
+      if (votes.size === 0) continue;
+      let best: { n: number; anchor: number } | null = null;
+      for (const v of votes.values()) if (!best || v.n > best.n) best = v;
+      result.push({ anchor: best!.anchor, pixels: Uint32Array.from(pixels) });
+    }
+    this.tinyRegions = result;
   }
 
   /**
@@ -511,7 +597,7 @@ export class CanvasManager {
 
     const diff = floodFillDiff(
       this.color32, this.canvasSize, this.canvasSize,
-      this.lineArtMask, nativeX, nativeY, hexToPacked(this.currentColor), this.gapMask
+      this.lineArtMask, nativeX, nativeY, hexToPacked(this.currentColor), this.gapMask, this.tinyRegions
     );
 
     // Taps on lines or same-colored areas change nothing and create no undo step
