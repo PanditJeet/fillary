@@ -4,6 +4,9 @@ import { StorageManager } from '../storage/storageManager.js';
 import { Logo } from './Logo.js';
 import { AudioManager } from '../audio/audioManager.js';
 import { PALETTES } from '../pages/paletteCatalog.js';
+import { AdService } from '../services/adService.js';
+import { PRIVACY_POLICY_URL } from '../config/app.js';
+import { openExternal } from '../services/links.js';
 
 export class HomePage {
   private element: HTMLElement;
@@ -238,6 +241,10 @@ export class HomePage {
             ${Logo.getBrandLockup({ markSize: 26, showSubtitle: true })}
           </div>
           <p class="footer-copy">Designed for mindfulness, creativity, and inner calm.</p>
+          <div class="footer-links">
+            <button class="footer-link" id="footer-privacy-policy">Privacy Policy</button>
+            ${AdService.isPrivacyOptionsRequired() ? '<button class="footer-link" id="footer-privacy-settings">Privacy Settings</button>' : ''}
+          </div>
         </footer>
       </div>
     `;
@@ -284,6 +291,14 @@ export class HomePage {
     browseBtn?.addEventListener('click', () => {
       const target = this.element.querySelector('#collections-section');
       target?.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    // Footer: privacy policy + (EEA/UK) ad consent settings
+    this.element.querySelector('#footer-privacy-policy')?.addEventListener('click', () => {
+      openExternal(PRIVACY_POLICY_URL);
+    });
+    this.element.querySelector('#footer-privacy-settings')?.addEventListener('click', () => {
+      AdService.showPrivacyOptions();
     });
 
     // Filter Buttons

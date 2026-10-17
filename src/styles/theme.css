@@ -1291,6 +1291,24 @@ html, body {
   color: var(--text-tertiary);
 }
 
+.footer-links {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.footer-link {
+  background: none;
+  border: none;
+  padding: 6px 0;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #b9b4aa);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
 
 
 /* Palette Lock Indicators */

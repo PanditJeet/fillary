@@ -2,7 +2,8 @@ import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import {
   AdMob,
   RewardAdPluginEvents,
-  MaxAdContentRating
+  MaxAdContentRating,
+  AdmobConsentStatus
 } from '@capacitor-community/admob';
 import { Toast } from '../ui/Toast.js';
 import { StorageManager } from '../storage/storageManager.js';
@@ -10,6 +11,9 @@ import { AD_UNITS, USE_TEST_ADS, AdUnitSet } from '../config/ads.js';
 
 export class AdService {
   private static initialized = false;
+  /** False only if the user's consent (EEA/UK) doesn't allow ad requests. */
+  private static canRequestAds = true;
+  private static privacyOptionsRequired = false;
 
   /**
    * Minimum time the user must actively spend in the app between two interstitials.
@@ -55,8 +59,9 @@ export class AdService {
           maxAdContentRating: MaxAdContentRating.General
         });
 
+        await this.gatherConsent();
         this.initialized = true;
-        console.log(`[AdService] AdMob initialized (${USE_TEST_ADS ? 'TEST ads' : 'production ads'}).`);
+        console.log(`[AdService] AdMob initialized (${USE_TEST_ADS ? 'TEST ads' : 'production ads'}, canRequestAds=${this.canRequestAds}).`);
         this.preloadInterstitial();
       } catch (err) {
         console.warn('[AdService] AdMob native initialization failed:', err);
@@ -93,7 +98,7 @@ export class AdService {
 
   /** Loads the next interstitial in the background so it can show instantly. */
   private static preloadInterstitial(): void {
-    if (!Capacitor.isNativePlatform() || !this.initialized || this.interstitialReady) return;
+    if (!Capacitor.isNativePlatform() || !this.initialized || !this.canRequestAds || this.interstitialReady) return;
     this.interstitialReady = AdMob.prepareInterstitial({
       adId: this.adIds().interstitial,
       isTesting: USE_TEST_ADS
@@ -120,6 +125,43 @@ export class AdService {
     if (elapsed < this.INTERSTITIAL_INTERVAL_MS) return false;
     if (Capacitor.isNativePlatform()) return this.initialized && this.interstitialLoaded;
     return true;
+  }
+
+  /**
+   * EU / UK user consent (Google UMP). Shows Google's consent message when required
+   * (configured in AdMob → Privacy & messaging). Outside the EEA/UK nothing is shown.
+   * If no message is configured yet, or the check fails, ads continue as before.
+   */
+  private static async gatherConsent(): Promise<void> {
+    try {
+      let info = await AdMob.requestConsentInfo({ tagForUnderAgeOfConsent: true });
+      if (info.isConsentFormAvailable && info.status === AdmobConsentStatus.REQUIRED) {
+        info = await AdMob.showConsentForm();
+      }
+      this.canRequestAds = info.canRequestAds;
+      this.privacyOptionsRequired =
+        (info.privacyOptionsRequirementStatus as string) === 'REQUIRED';
+    } catch (err) {
+      console.warn('[AdService] Consent check failed (continuing):', err);
+    }
+  }
+
+  /** True when the user must be offered a way to change their ad consent (EEA/UK). */
+  public static isPrivacyOptionsRequired(): boolean {
+    return this.privacyOptionsRequired;
+  }
+
+  /** Opens Google's privacy options form so the user can change their consent. */
+  public static async showPrivacyOptions(): Promise<void> {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      await AdMob.showPrivacyOptionsForm();
+      const info = await AdMob.requestConsentInfo({ tagForUnderAgeOfConsent: true });
+      this.canRequestAds = info.canRequestAds;
+    } catch (err) {
+      console.warn('[AdService] Privacy options form failed:', err);
+      Toast.show('Privacy settings are not available right now.');
+    }
   }
 
   private static todayKey(): string {
@@ -153,7 +195,7 @@ export class AdService {
       }
 
       const adId = this.adIds().appOpen;
-      if (!this.initialized || !adId) return false;
+      if (!this.initialized || !this.canRequestAds || !adId) return false;
 
       const loaded = await Promise.race([
         AdMob.loadAppOpen({ adId }).then(() => true).catch((err) => {
@@ -240,7 +282,7 @@ export class AdService {
       return this.simulateWebAd('rewarded', rewardPurpose);
     }
 
-    if (!this.initialized) {
+    if (!this.initialized || !this.canRequestAds) {
       Toast.show('Ads are not available right now. Please try again later.');
       return false;
     }
