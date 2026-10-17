@@ -17,8 +17,8 @@ def signingValue = { String name -> readProp(name) ?: keystoreProps.getProperty(
 def releaseStoreFile = signingValue('FILLARY_KEYSTORE_FILE')
 def hasReleaseSigning = releaseStoreFile != null && file(releaseStoreFile).exists()
 
-// Google's official TEST AdMob App ID is used unless a real one is configured
-def admobAppId = readProp('ADMOB_APP_ID') ?: 'ca-app-pub-3940256099942544~3347511713'
+// Fillary's AdMob App ID (can be overridden with ADMOB_APP_ID)
+def admobAppId = readProp('ADMOB_APP_ID') ?: 'ca-app-pub-5099555951520770~6107756032'
 
 android {
     namespace = "com.fillary.app"

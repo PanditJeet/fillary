@@ -1,13 +1,14 @@
 /**
  * AdMob ad unit configuration.
  *
- * Real IDs are read from environment variables at build time (Vite):
+ * Production builds use Fillary's real Android ad units (FILLARY_ANDROID_UNITS below).
+ * They can be overridden at build time with the env vars
  *   VITE_ADMOB_ANDROID_INTERSTITIAL, VITE_ADMOB_ANDROID_REWARDED, VITE_ADMOB_ANDROID_APP_OPEN
  *   VITE_ADMOB_IOS_INTERSTITIAL,     VITE_ADMOB_IOS_REWARDED,     VITE_ADMOB_IOS_APP_OPEN
- * Put them in a `.env.production` file (not committed) or in GitHub Actions secrets.
  *
- * If they are missing, or the app runs in dev mode, Google's official TEST ad units
- * are used, which never earn money but are safe to click.
+ * In dev mode (npm run dev) Google's official TEST ad units are used.
+ * To test release builds on your own phone without risking invalid clicks, add the phone
+ * as a test device in AdMob (Settings → Test devices).
  *
  * The AdMob *App ID* is set separately for Android in android/gradle.properties
  * (ADMOB_APP_ID) or the ADMOB_APP_ID environment variable.
@@ -28,11 +29,18 @@ const TEST_UNITS = {
 
 const env = import.meta.env;
 
+/** Fillary's real AdMob ad units (AdMob app "Fillary", Android). Env vars can override them. */
+const FILLARY_ANDROID_UNITS = {
+  interstitial: 'ca-app-pub-5099555951520770/5112659556',
+  rewarded: 'ca-app-pub-5099555951520770/4123011511',
+  appOpen: 'ca-app-pub-5099555951520770/2920601320'
+};
+
 const PROD_UNITS = {
   android: {
-    interstitial: env.VITE_ADMOB_ANDROID_INTERSTITIAL as string | undefined,
-    rewarded: env.VITE_ADMOB_ANDROID_REWARDED as string | undefined,
-    appOpen: env.VITE_ADMOB_ANDROID_APP_OPEN as string | undefined
+    interstitial: (env.VITE_ADMOB_ANDROID_INTERSTITIAL as string | undefined) || FILLARY_ANDROID_UNITS.interstitial,
+    rewarded: (env.VITE_ADMOB_ANDROID_REWARDED as string | undefined) || FILLARY_ANDROID_UNITS.rewarded,
+    appOpen: (env.VITE_ADMOB_ANDROID_APP_OPEN as string | undefined) || FILLARY_ANDROID_UNITS.appOpen
   },
   ios: {
     interstitial: env.VITE_ADMOB_IOS_INTERSTITIAL as string | undefined,
