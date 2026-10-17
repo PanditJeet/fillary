@@ -6,14 +6,31 @@ import {
 } from '@capacitor-community/admob';
 import { Toast } from '../ui/Toast.js';
 import { StorageManager } from '../storage/storageManager.js';
-import { AD_UNITS, USE_TEST_ADS } from '../config/ads.js';
+import { AD_UNITS, USE_TEST_ADS, AdUnitSet } from '../config/ads.js';
 
 export class AdService {
   private static initialized = false;
-  private static lastInterstitialTime = 0;
-  private static readonly INTERSTITIAL_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes cooldown
 
-  private static adIds(): { interstitial: string; rewarded: string } {
+  /**
+   * Minimum time the user must actively spend in the app between two interstitials.
+   * Ads are only shown at natural breaks (going home, opening another picture, exporting),
+   * never while the user is in the middle of coloring (AdMob / Families policy).
+   */
+  private static readonly INTERSTITIAL_INTERVAL_MS = 4 * 60 * 1000;
+
+  // Active (foreground) time tracking — time spent in the background doesn't count
+  private static activeAccumMs = 0;
+  private static activeSince: number | null = Date.now();
+
+  private static interstitialReady: Promise<boolean> | null = null;
+  private static interstitialLoaded = false;
+  private static isShowing = false;
+
+  private static readonly DAILY_APP_OPEN_KEY = 'fillary_app_open_ad_day';
+  private static readonly APP_OPEN_LOAD_TIMEOUT_MS = 4000;
+  private static appOpenInFlight = false;
+
+  private static adIds(): AdUnitSet {
     const platform = Capacitor.getPlatform() === 'ios' ? 'ios' : 'android';
     return AD_UNITS[platform];
   }
@@ -40,6 +57,7 @@ export class AdService {
 
         this.initialized = true;
         console.log(`[AdService] AdMob initialized (${USE_TEST_ADS ? 'TEST ads' : 'production ads'}).`);
+        this.preloadInterstitial();
       } catch (err) {
         console.warn('[AdService] AdMob native initialization failed:', err);
       }
@@ -49,34 +67,166 @@ export class AdService {
     }
   }
 
+  /** Call when the app goes to the background. */
+  public static onAppPause(): void {
+    if (this.activeSince !== null) {
+      this.activeAccumMs += Date.now() - this.activeSince;
+      this.activeSince = null;
+    }
+  }
+
+  /** Call when the app returns to the foreground. */
+  public static onAppResume(): void {
+    if (this.activeSince === null) {
+      this.activeSince = Date.now();
+    }
+  }
+
+  private static activeTimeMs(): number {
+    return this.activeAccumMs + (this.activeSince !== null ? Date.now() - this.activeSince : 0);
+  }
+
+  private static resetActiveTimer(): void {
+    this.activeAccumMs = 0;
+    this.activeSince = Date.now();
+  }
+
+  /** Loads the next interstitial in the background so it can show instantly. */
+  private static preloadInterstitial(): void {
+    if (!Capacitor.isNativePlatform() || !this.initialized || this.interstitialReady) return;
+    this.interstitialReady = AdMob.prepareInterstitial({
+      adId: this.adIds().interstitial,
+      isTesting: USE_TEST_ADS
+    })
+      .then(() => {
+        this.interstitialLoaded = true;
+        return true;
+      })
+      .catch((err) => {
+        console.warn('[AdService] Interstitial preload failed:', err);
+        this.interstitialReady = null; // retry at the next opportunity
+        return false;
+      });
+  }
+
   /**
-   * Displays a full-screen Interstitial Ad (e.g. after Exporting artwork).
-   * Automatically enforces cooldown so users are never annoyed.
+   * True when a timed ad break is due (4 active minutes since the last ad)
+   * AND an ad is already loaded, so a "Ad break in 5s" countdown never leads to nothing.
    */
-  public static async showInterstitial(placement: string = 'export'): Promise<boolean> {
-    const now = Date.now();
-    if (now - this.lastInterstitialTime < this.INTERSTITIAL_COOLDOWN_MS) {
+  public static isTimedAdReady(): boolean {
+    if (this.isShowing) return false;
+    const elapsed = this.activeTimeMs();
+    if (elapsed > this.INTERSTITIAL_INTERVAL_MS - 60 * 1000) this.preloadInterstitial();
+    if (elapsed < this.INTERSTITIAL_INTERVAL_MS) return false;
+    if (Capacitor.isNativePlatform()) return this.initialized && this.interstitialLoaded;
+    return true;
+  }
+
+  private static todayKey(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  }
+
+  /**
+   * Shows one App Open ad the first time the app is opened (or brought back) each day.
+   * Uses AdMob's dedicated App Open format, which is the policy-compliant way to show
+   * an ad at launch. If the ad can't load within a few seconds it is skipped (no waiting),
+   * and it will be tried again the next time the app is opened that day.
+   */
+  public static async showDailyAppOpenAd(): Promise<boolean> {
+    if (this.appOpenInFlight || this.isShowing) return false;
+    const today = this.todayKey();
+    if (StorageManager.getItem(this.DAILY_APP_OPEN_KEY) === today) return false;
+
+    this.appOpenInFlight = true;
+    try {
+      if (!Capacitor.isNativePlatform()) {
+        StorageManager.setItem(this.DAILY_APP_OPEN_KEY, today);
+        this.isShowing = true;
+        try {
+          await this.simulateWebAd('interstitial', 'Daily App Open Ad');
+        } finally {
+          this.isShowing = false;
+        }
+        this.resetActiveTimer();
+        return true;
+      }
+
+      const adId = this.adIds().appOpen;
+      if (!this.initialized || !adId) return false;
+
+      const loaded = await Promise.race([
+        AdMob.loadAppOpen({ adId }).then(() => true).catch((err) => {
+          console.warn('[AdService] App open ad failed to load:', err);
+          return false;
+        }),
+        new Promise<boolean>(r => setTimeout(() => r(false), this.APP_OPEN_LOAD_TIMEOUT_MS))
+      ]);
+      if (!loaded) return false;
+      // The user may have left the app while the ad was loading
+      if (document.hidden) return false;
+
+      StorageManager.setItem(this.DAILY_APP_OPEN_KEY, today);
+      this.isShowing = true;
+      try {
+        await AdMob.showAppOpen();
+      } finally {
+        this.isShowing = false;
+      }
+      this.resetActiveTimer(); // don't stack a timed ad break right after
+      return true;
+    } catch (err) {
+      console.warn('[AdService] App open ad failed:', err);
+      return false;
+    } finally {
+      this.appOpenInFlight = false;
+    }
+  }
+
+  /**
+   * Shows a full-screen interstitial at a natural break (going home, opening another
+   * picture, exporting) — but only once the user has been active for 4 minutes since
+   * the last ad. Returns true if an ad was shown.
+   */
+  public static async showInterstitial(placement: string = 'break'): Promise<boolean> {
+    if (this.isShowing) return false;
+
+    const elapsed = this.activeTimeMs();
+    if (elapsed < this.INTERSTITIAL_INTERVAL_MS) {
+      // Start loading the ad shortly before it's due
+      if (elapsed > this.INTERSTITIAL_INTERVAL_MS - 60 * 1000) this.preloadInterstitial();
       return false;
     }
 
     if (Capacitor.isNativePlatform()) {
       if (!this.initialized) return false;
-      try {
-        await AdMob.prepareInterstitial({
-          adId: this.adIds().interstitial,
-          isTesting: USE_TEST_ADS
-        });
+      this.preloadInterstitial();
+      const ready = this.interstitialReady ? await this.interstitialReady : false;
+      if (!ready) return false; // no ad available right now; try again at the next break
 
+      this.isShowing = true;
+      try {
         await AdMob.showInterstitial();
-        this.lastInterstitialTime = Date.now();
+        this.resetActiveTimer();
         return true;
       } catch (err) {
         console.warn('[AdService] Native interstitial failed:', err);
         return false;
+      } finally {
+        this.isShowing = false;
+        this.interstitialReady = null;
+        this.interstitialLoaded = false;
+        this.preloadInterstitial(); // get the next one ready
       }
     } else {
-      this.lastInterstitialTime = now;
-      return this.simulateWebAd('interstitial', `Sponsored Interstitial (${placement})`);
+      this.isShowing = true;
+      try {
+        const shown = await this.simulateWebAd('interstitial', `Sponsored Interstitial (${placement})`);
+        this.resetActiveTimer();
+        return shown;
+      } finally {
+        this.isShowing = false;
+      }
     }
   }
 

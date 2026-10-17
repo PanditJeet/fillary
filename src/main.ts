@@ -11,6 +11,7 @@ import { PageMetadata } from './engine/types.js';
 import { AdService } from './services/adService.js';
 import { AudioManager } from './audio/audioManager.js';
 import { AudioModal } from './ui/AudioModal.js';
+import { AdBreakCountdown } from './ui/AdBreakCountdown.js';
 import { App as CapApp } from '@capacitor/app';
 
 type ViewMode = 'home' | 'studio';
@@ -55,7 +56,9 @@ class App {
     this.canvasManager = new CanvasManager(displayCanvas);
 
     // 4. Initialize Gallery Modal
-    this.galleryModal = new GalleryModal((selectedPage) => {
+    this.galleryModal = new GalleryModal(async (selectedPage) => {
+      // Natural break: picking another picture (ad only if 4 active minutes have passed)
+      await AdService.showInterstitial('page-switch');
       this.switchPage(selectedPage);
     });
     document.body.appendChild(this.galleryModal.getElement());
@@ -71,7 +74,7 @@ class App {
     this.header = new FloatingHeader(
       this.canvasManager,
       () => this.galleryModal.open(),
-      () => this.showHome(),
+      () => this.leaveStudio(),
       () => this.audioModal.open()
     );
     this.studioContainer.appendChild(this.header.getElement());
@@ -102,8 +105,12 @@ class App {
           if (!state.isActive) {
             this.saveCurrentProgress();
             AudioManager.pauseOnBackground();
+            AdService.onAppPause();
           } else {
             AudioManager.resumeOnForeground();
+            AdService.onAppResume();
+            // First time the app is brought back on a new day
+            AdService.showDailyAppOpenAd().catch(() => {});
           }
         }).catch(() => {});
 
@@ -122,7 +129,7 @@ class App {
           } else if (this.galleryModal.isOpen()) {
             this.galleryModal.close();
           } else if (this.currentView === 'studio') {
-            this.showHome();
+            this.leaveStudio();
           } else {
             this.saveCurrentProgress();
             CapApp.exitApp();
@@ -135,12 +142,19 @@ class App {
     window.addEventListener('beforeunload', () => this.saveCurrentProgress());
     window.addEventListener('pagehide', () => this.saveCurrentProgress());
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) this.saveCurrentProgress();
+      if (document.hidden) {
+        this.saveCurrentProgress();
+        AdService.onAppPause();
+      } else {
+        AdService.onAppResume();
+      }
     });
 
     // 8. Initialize Home Page
     this.homePage = new HomePage(
-      (selectedPage) => {
+      async (selectedPage) => {
+        // Natural break: starting a picture from the home screen
+        await AdService.showInterstitial('open-page');
         this.showStudio(selectedPage);
       },
       () => {
@@ -151,12 +165,21 @@ class App {
     appEl.appendChild(this.homePage.getElement());
     appEl.appendChild(this.studioContainer);
 
+    // Timed ad breaks: every 4 active minutes, with a 5-second on-screen warning,
+    // only while coloring in the studio and no popup is open.
+    new AdBreakCountdown(() =>
+      this.currentView === 'studio' && !this.galleryModal.isOpen() && !this.audioModal.isOpen()
+    );
+
     // 9. Initial Page Setup
     const savedPageId = StorageManager.getActivePageId();
     this.currentPage = savedPageId ? getPageById(savedPageId) : PAGES[0];
 
     // Default view: Home Page
     this.showHome();
+
+    // One App Open ad on the first launch of each day
+    AdService.showDailyAppOpenAd().catch(() => {});
   }
 
   public getCurrentView(): ViewMode {
@@ -186,6 +209,12 @@ class App {
     }
     const thumbUrl = this.canvasManager.getThumbnailDataUrl(256);
     StorageManager.savePageProgress(canvasPage.id, actions, thumbUrl);
+  }
+
+  /** Leaves the studio for the home screen; a natural break where a due ad may be shown. */
+  private leaveStudio(): void {
+    this.showHome();
+    AdService.showInterstitial('home').catch(() => {});
   }
 
   public showHome(): void {

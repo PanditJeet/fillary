@@ -9,17 +9,18 @@ This guide walks you through every step to package, sign, and upload **Fillary**
 ### a) Real AdMob IDs
 The app falls back to Google's test ads unless real IDs are provided.
 
-1. In [AdMob](https://admob.google.com) create the app and two ad units: **Interstitial** and **Rewarded**.
+1. In [AdMob](https://admob.google.com) create the app and three ad units: **Interstitial**, **Rewarded** and **App open**.
 2. Create a file `C:\Fillary\.env.production` (it is git-ignored):
    ```
    VITE_ADMOB_ANDROID_INTERSTITIAL=ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX
    VITE_ADMOB_ANDROID_REWARDED=ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX
+   VITE_ADMOB_ANDROID_APP_OPEN=ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX
    ```
 3. Add your AdMob **App ID** to `android/gradle.properties`:
    ```
    ADMOB_APP_ID=ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX
    ```
-   For GitHub Actions, add secrets `ADMOB_APP_ID`, `ADMOB_ANDROID_INTERSTITIAL`, `ADMOB_ANDROID_REWARDED` instead.
+   For GitHub Actions, add secrets `ADMOB_APP_ID`, `ADMOB_ANDROID_INTERSTITIAL`, `ADMOB_ANDROID_REWARDED`, `ADMOB_ANDROID_APP_OPEN` instead.
 
 ### b) Release signing key
 1. Create a keystore once (keep it and its passwords safe forever — you need it for every update):

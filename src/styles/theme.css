@@ -2315,3 +2315,29 @@ html, body {
 }
 
 
+
+/* ---- Timed ad break countdown ---- */
+.ad-countdown-pill {
+  position: fixed;
+  top: calc(var(--safe-top, 0px) + 64px);
+  left: 50%;
+  transform: translate(-50%, -8px);
+  z-index: 9000;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(20, 23, 31, 0.88);
+  color: #F4F1EA;
+  border: 1px solid rgba(226, 177, 104, 0.45);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.ad-countdown-pill.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

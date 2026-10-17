@@ -243,7 +243,7 @@ export class FloatingHeader {
     if (this.isExporting) return;
     this.isExporting = true;
     try {
-      // Show non-intrusive interstitial ad (respects 2-minute cooldown)
+      // Natural break: show an interstitial if 4 active minutes have passed since the last ad
       await AdService.showInterstitial('export');
 
       const dataUrl = this.canvasManager.exportImage();
