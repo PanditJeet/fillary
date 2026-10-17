@@ -74,6 +74,7 @@ jobs:
             echo "FILLARY_KEY_PASSWORD=$K"
           } >> "$GITHUB_ENV"
           # Clear checks so a wrong secret is obvious in the log
+          echo "Key received: $(stat -c%s "$RUNNER_TEMP/fillary-release.jks") bytes, fingerprint $(sha256sum "$RUNNER_TEMP/fillary-release.jks" | cut -c1-16) (pasted text was $(printf '%s' "$KS_B64" | tr -d ' \r\n\t' | wc -c) characters)"
           if ! keytool -list -keystore "$RUNNER_TEMP/fillary-release.jks" -storepass "$P" > "$RUNNER_TEMP/ks.txt" 2>&1; then
             echo "::error::Could not open the keystore. Either FILLARY_KEYSTORE_BASE64 is not the full text of FILLARY_KEYSTORE_BASE64.txt, or FILLARY_KEYSTORE_PASSWORD is wrong."
             exit 1
