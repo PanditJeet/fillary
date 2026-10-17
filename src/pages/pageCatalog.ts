@@ -8,7 +8,7 @@ export const ANIMAL_PAGES: PageMetadata[] = [
     category: 'Animals',
     difficulty: 'Gentle',
     description: 'A cheerful, adorable puppy with big sparkling eyes, tennis ball, and cute doghouse in the garden.',
-    imageUrl: '/pages/puppy-playtime.jpg'
+    imageUrl: '/pages/puppy-playtime.png'
   },
   {
     id: 'kitten-yarn',
@@ -16,7 +16,7 @@ export const ANIMAL_PAGES: PageMetadata[] = [
     category: 'Animals',
     difficulty: 'Gentle',
     description: 'An adorable fluffy kitten playing with a ball of yarn among garden tulips and fluttery butterflies.',
-    imageUrl: '/pages/kitten-yarn.jpg'
+    imageUrl: '/pages/kitten-yarn.png'
   },
   {
     id: 'bunny-carrot',
@@ -24,7 +24,7 @@ export const ANIMAL_PAGES: PageMetadata[] = [
     category: 'Animals',
     difficulty: 'Gentle',
     description: 'A happy, sweet bunny rabbit hugging a giant crunchy carrot surrounded by smiling sunflowers.',
-    imageUrl: '/pages/bunny-carrot.jpg'
+    imageUrl: '/pages/bunny-carrot.png'
   },
   {
     id: 'baby-panda',
@@ -32,7 +32,7 @@ export const ANIMAL_PAGES: PageMetadata[] = [
     category: 'Animals',
     difficulty: 'Gentle',
     description: 'A joyful baby panda happily holding sweet bamboo stalks in a flowering blossom grove.',
-    imageUrl: '/pages/baby-panda.jpg'
+    imageUrl: '/pages/baby-panda.png'
   },
   {
     id: 'fox-autumn',
@@ -40,7 +40,7 @@ export const ANIMAL_PAGES: PageMetadata[] = [
     category: 'Animals',
     difficulty: 'Gentle',
     description: 'A friendly little fox with a big fluffy tail sitting in an autumn forest with acorns and mushrooms.',
-    imageUrl: '/pages/fox-autumn.jpg'
+    imageUrl: '/pages/fox-autumn.png'
   },
   {
     id: 'lion-cub',
@@ -48,7 +48,7 @@ export const ANIMAL_PAGES: PageMetadata[] = [
     category: 'Animals',
     difficulty: 'Gentle',
     description: 'A playful baby lion cub batting happily at a butterfly under the warm African sunshine.',
-    imageUrl: '/pages/lion-cub.jpg'
+    imageUrl: '/pages/lion-cub.png'
   },
   {
     id: 'hamster-snack',
@@ -56,7 +56,7 @@ export const ANIMAL_PAGES: PageMetadata[] = [
     category: 'Animals',
     difficulty: 'Gentle',
     description: 'A super cute chubby hamster munching a giant sunflower seed among berries and blooming flowers.',
-    imageUrl: '/pages/hamster-snack.jpg'
+    imageUrl: '/pages/hamster-snack.png'
   },
   {
     id: 'dolphin-ocean',
@@ -64,7 +64,7 @@ export const ANIMAL_PAGES: PageMetadata[] = [
     category: 'Animals',
     difficulty: 'Gentle',
     description: 'A leaping ocean dolphin and smiling baby sea turtle swimming through bubbly waves with starfish.',
-    imageUrl: '/pages/dolphin-ocean.jpg'
+    imageUrl: '/pages/dolphin-ocean.png'
   }
 ];
 
@@ -75,7 +75,7 @@ export const MYSTICAL_PAGES: PageMetadata[] = [
     category: 'Mystical',
     difficulty: 'Gentle',
     description: 'An enchanted baby unicorn with a spiral horn and curly mane sitting on a rainbow amongst stars.',
-    imageUrl: '/pages/unicorn-rainbow.jpg'
+    imageUrl: '/pages/unicorn-rainbow.png'
   },
   {
     id: 'wizard-owl',
@@ -83,7 +83,7 @@ export const MYSTICAL_PAGES: PageMetadata[] = [
     category: 'Mystical',
     difficulty: 'Gentle',
     description: 'A cute little owl wearing a starry wizard hat with magic wand, spellbook, and potion bottles.',
-    imageUrl: '/pages/wizard-owl.jpg'
+    imageUrl: '/pages/wizard-owl.png'
   },
   {
     id: 'celestial-kitsune',
@@ -91,7 +91,7 @@ export const MYSTICAL_PAGES: PageMetadata[] = [
     category: 'Mystical',
     difficulty: 'Gentle',
     description: 'A magical celestial cartoon fox with three fluffy tails curled up on a smiling crescent moon.',
-    imageUrl: '/pages/celestial-kitsune.jpg'
+    imageUrl: '/pages/celestial-kitsune.png'
   },
   {
     id: 'baby-dragon',
@@ -99,7 +99,7 @@ export const MYSTICAL_PAGES: PageMetadata[] = [
     category: 'Mystical',
     difficulty: 'Gentle',
     description: 'A lovable baby dragon with tiny wings sitting on a soft cloud with twinkling stars and moon.',
-    imageUrl: '/pages/baby-dragon.jpg'
+    imageUrl: '/pages/baby-dragon.png'
   }
 ];
 

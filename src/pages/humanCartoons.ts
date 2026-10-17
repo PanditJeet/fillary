@@ -7,7 +7,7 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     category: 'Human Cartoons',
     difficulty: 'Gentle',
     description: 'A cute little astronaut floating happily in space with smiling planets and a rocket ship.',
-    imageUrl: '/pages/human-astronaut.jpg'
+    imageUrl: '/pages/human-astronaut.png'
   },
   {
     id: 'human-chef',
@@ -15,7 +15,7 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     category: 'Human Cartoons',
     difficulty: 'Gentle',
     description: 'A cheerful kid chef with a tall chef hat and giant cupcake with frosting and a cherry.',
-    imageUrl: '/pages/human-chef.jpg'
+    imageUrl: '/pages/human-chef.png'
   },
   {
     id: 'human-superhero',
@@ -23,7 +23,7 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     category: 'Human Cartoons',
     difficulty: 'Gentle',
     description: 'A confident superhero kid with a flowing cape and star emblem overlooking the city.',
-    imageUrl: '/pages/superhero-kid.jpg'
+    imageUrl: '/pages/superhero-kid.png'
   },
   {
     id: 'human-gardener',
@@ -31,7 +31,7 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     category: 'Human Cartoons',
     difficulty: 'Gentle',
     description: 'A cheerful little gardener planting seedlings with a friendly kitten and flowers.',
-    imageUrl: '/pages/gardener-boy.jpg'
+    imageUrl: '/pages/gardener-boy.png'
   },
   {
     id: 'human-musician',
@@ -39,7 +39,7 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     category: 'Human Cartoons',
     difficulty: 'Gentle',
     description: 'A joyful kid playing a cheerful tune on an acoustic ukulele with a happy puppy.',
-    imageUrl: '/pages/ukulele-player.jpg'
+    imageUrl: '/pages/ukulele-player.png'
   },
   {
     id: 'human-artist',
@@ -47,7 +47,7 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     category: 'Human Cartoons',
     difficulty: 'Gentle',
     description: 'A happy little painter in a beret painting mountains on an easel with a sleeping kitty.',
-    imageUrl: '/pages/canvas-painter.jpg'
+    imageUrl: '/pages/canvas-painter.png'
   },
   {
     id: 'human-knight',
@@ -55,7 +55,7 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     category: 'Human Cartoons',
     difficulty: 'Gentle',
     description: 'A brave little knight holding a sword and lion shield alongside a cute baby dragon.',
-    imageUrl: '/pages/brave-knight.jpg'
+    imageUrl: '/pages/brave-knight.png'
   },
   {
     id: 'human-ballerina',
@@ -63,7 +63,7 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     category: 'Human Cartoons',
     difficulty: 'Gentle',
     description: 'A smiling ballerina girl in a fluffy tutu doing a graceful dance on pointe in her studio.',
-    imageUrl: '/pages/ballerina-girl.jpg'
+    imageUrl: '/pages/ballerina-girl.png'
   },
   {
     id: 'human-scuba',
@@ -71,7 +71,7 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     category: 'Human Cartoons',
     difficulty: 'Gentle',
     description: 'A cheerful deep-sea snorkeler swimming with sea turtles, manta rays, and coral reef fish.',
-    imageUrl: '/pages/scuba-diver.jpg'
+    imageUrl: '/pages/scuba-diver.png'
   },
   {
     id: 'human-wizard',
@@ -79,7 +79,7 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     category: 'Human Cartoons',
     difficulty: 'Gentle',
     description: 'A cute young wizard casting sparkling stars from a magic wand with an owl and kitten.',
-    imageUrl: '/pages/wizard-apprentice.jpg'
+    imageUrl: '/pages/wizard-apprentice.png'
   },
   {
     id: 'human-reader',
@@ -87,7 +87,7 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     category: 'Human Cartoons',
     difficulty: 'Gentle',
     description: 'A cozy kid curled up in a blanket fort reading a magical storybook with a warm mug and kitten.',
-    imageUrl: '/pages/cozy-reader.jpg'
+    imageUrl: '/pages/cozy-reader.png'
   },
   {
     id: 'human-scientist',
@@ -95,6 +95,6 @@ export const HUMAN_CARTOON_PAGES: PageMetadata[] = [
     category: 'Human Cartoons',
     difficulty: 'Gentle',
     description: 'A bright young scientist with safety goggles observing bubbling test tubes and a microscope.',
-    imageUrl: '/pages/junior-scientist.jpg'
+    imageUrl: '/pages/junior-scientist.png'
   }
 ];

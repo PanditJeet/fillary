@@ -497,19 +497,22 @@ export class CanvasManager {
       }
     }
 
-    this.computeTinyRegions();
+    this.computeTinyRegions(rawMask);
   }
 
   /**
-   * Finds tiny enclosed pockets (≤ TINY_MAX_AREA px) — typically slivers where thin strokes
-   * meet or pockets created by gap sealing — and links each to the large area it borders
-   * across a thin line (≤ TINY_MAX_LINE px). Filling that area then colors the pocket too,
-   * so no white specks are left behind. Pockets behind thick outlines (e.g. eye highlights)
-   * are not linked and stay as they are.
+   * Links every "orphan" pixel to the real colorable area it belongs to, so it gets
+   * colored together with that area. Orphans are pixels that are not visible line but
+   * can never be filled by a tap:
+   *  - gap-seal pixels (narrow strips between close lines, sealed to stop leaks), and
+   *  - tiny enclosed pockets (≤ TINY_MAX_AREA px), e.g. slivers where strokes meet.
+   * Each orphan goes to the nearest large area reachable without crossing a visible
+   * line; pockets fully enclosed by thin lines (≤ ORPHAN_MAX_LINE px) go to the nearest
+   * area across that line. Pockets behind thick outlines (e.g. eye shines) are left alone.
    */
-  private computeTinyRegions(): void {
+  private computeTinyRegions(rawMask: Uint8Array): void {
     const TINY_MAX_AREA = 80;
-    const TINY_MAX_LINE = 5;
+    const ORPHAN_MAX_LINE = 6;
     const W = this.canvasSize, N = W * W, mask = this.lineArtMask;
 
     // 1. Label fillable regions (4-connected)
@@ -534,28 +537,82 @@ export class CanvasManager {
       }
       areas.push(area);
     }
+    const isBig = (l: number) => l > 0 && areas[l] > TINY_MAX_AREA;
 
-    // 2. Collect pixels of tiny regions
-    const tinyPixels = new Map<number, number[]>();
+    // Small but round shapes (e.g. flower petals) stay their own tappable areas:
+    // a tiny region counts as "round" if it contains a full 5x5 block of its own pixels.
+    const round = new Uint8Array(areas.length);
     for (let i = 0; i < N; i++) {
       const l = labels[i];
-      if (l && areas[l] <= TINY_MAX_AREA) {
-        let arr = tinyPixels.get(l);
-        if (!arr) { arr = []; tinyPixels.set(l, arr); }
-        arr.push(i);
+      if (!l || isBig(l) || round[l]) continue;
+      const x = i % W, y = (i / W) | 0;
+      if (x < 2 || y < 2 || x > W - 3 || y > W - 3) continue;
+      let full = true;
+      for (let dy = -2; dy <= 2 && full; dy++) {
+        const row = i + dy * W;
+        for (let dx = -2; dx <= 2; dx++) {
+          if (labels[row + dx] !== l) { full = false; break; }
+        }
+      }
+      if (full) round[l] = 1;
+    }
+
+    // 2. owner[i] = big region an orphan pixel is assigned to (0 = not yet)
+    const owner = new Int32Array(N);
+    const isOrphan = (i: number) => !rawMask[i] && !isBig(labels[i]) && !round[labels[i]];
+
+    // 3. Multi-source BFS from big regions into orphan pixels, never crossing visible lines
+    let queue = new Int32Array(N);
+    let qh = 0, qt = 0;
+    for (let i = 0; i < N; i++) {
+      const l = labels[i];
+      if (!isBig(l)) continue;
+      const x = i % W;
+      if ((x > 0 && isOrphan(i - 1)) || (x < W - 1 && isOrphan(i + 1)) ||
+          (i >= W && isOrphan(i - W)) || (i < N - W && isOrphan(i + W))) {
+        owner[i] = l;
+        queue[qt++] = i;
+      }
+    }
+    while (qh < qt) {
+      const p = queue[qh++];
+      const l = owner[p];
+      const x = p % W;
+      const nbs = [x > 0 ? p - 1 : -1, x < W - 1 ? p + 1 : -1, p >= W ? p - W : -1, p < N - W ? p + W : -1];
+      for (const q of nbs) {
+        if (q < 0 || owner[q] || !isOrphan(q)) continue;
+        owner[q] = l;
+        queue[qt++] = q;
       }
     }
 
-    // 3. For each tiny region, search outward through line pixels for the nearest large region
-    const result: TinyRegion[] = [];
-    const seen = new Uint32Array(N); // visit stamp per tiny region
+    // 4. Orphan groups still unassigned are enclosed by visible line: look across thin lines
+    const seen = new Uint32Array(N);
     let stamp = 0;
-    for (const [, pixels] of tinyPixels) {
+    for (let i = 0; i < N; i++) {
+      if (owner[i] || !isOrphan(i)) continue;
+      // collect this unassigned orphan group
+      const group: number[] = [];
+      let sp = 0;
+      stack[sp++] = i;
+      owner[i] = -1;
+      while (sp > 0) {
+        const p = stack[--sp];
+        group.push(p);
+        const x = p % W;
+        const nbs = [x > 0 ? p - 1 : -1, x < W - 1 ? p + 1 : -1, p >= W ? p - W : -1, p < N - W ? p + W : -1];
+        for (const q of nbs) {
+          if (q < 0 || owner[q] || !isOrphan(q)) continue;
+          owner[q] = -1;
+          stack[sp++] = q;
+        }
+      }
+      if (group.length > TINY_MAX_AREA * 4) continue; // large enclosed areas stay independent
       stamp++;
       let frontier: number[] = [];
-      for (const p of pixels) { seen[p] = stamp; frontier.push(p); }
-      const votes = new Map<number, { n: number; anchor: number }>();
-      for (let depth = 0; depth < TINY_MAX_LINE + 1 && votes.size === 0 && frontier.length; depth++) {
+      for (const p of group) { seen[p] = stamp; frontier.push(p); }
+      const votes = new Map<number, number>();
+      for (let depth = 0; depth <= ORPHAN_MAX_LINE && votes.size === 0 && frontier.length; depth++) {
         const next: number[] = [];
         for (const p of frontier) {
           const x = p % W;
@@ -563,22 +620,39 @@ export class CanvasManager {
           for (const q of nbs) {
             if (q < 0 || seen[q] === stamp) continue;
             seen[q] = stamp;
-            const l = labels[q];
-            if (l && areas[l] > TINY_MAX_AREA) {
-              const v = votes.get(l);
-              if (v) v.n++; else votes.set(l, { n: 1, anchor: q });
-            } else if (mask[q]) {
-              next.push(q); // keep walking through the line
-            }
+            const o = owner[q] > 0 ? owner[q] : (isBig(labels[q]) ? labels[q] : 0);
+            if (o) votes.set(o, (votes.get(o) || 0) + 1);
+            else if (rawMask[q]) next.push(q); // walk through the line
           }
         }
         frontier = next;
       }
       if (votes.size === 0) continue;
-      let best: { n: number; anchor: number } | null = null;
-      for (const v of votes.values()) if (!best || v.n > best.n) best = v;
-      result.push({ anchor: best!.anchor, pixels: Uint32Array.from(pixels) });
+      let best = 0, bestN = -1;
+      for (const [l, n] of votes) if (n > bestN) { best = l; bestN = n; }
+      for (const p of group) owner[p] = best;
     }
+
+    // 5. Group orphan pixels per region (only pixels that are not part of the region itself)
+    const perRegion = new Map<number, number[]>();
+    const anchorOf = new Map<number, number>();
+    for (let i = 0; i < N; i++) {
+      const l = labels[i];
+      if (isBig(l) && !anchorOf.has(l)) anchorOf.set(l, i);
+      const o = owner[i];
+      if (o > 0 && !(labels[i] === o)) {
+        let arr = perRegion.get(o);
+        if (!arr) { arr = []; perRegion.set(o, arr); }
+        arr.push(i);
+      }
+    }
+    const result: TinyRegion[] = [];
+    for (const [l, pixels] of perRegion) {
+      const anchor = anchorOf.get(l);
+      if (anchor === undefined) continue;
+      result.push({ anchor, pixels: Uint32Array.from(pixels) });
+    }
+    queue = new Int32Array(0);
     this.tinyRegions = result;
   }
 

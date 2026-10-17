@@ -208,7 +208,7 @@ class App {
       return;
     }
     const thumbUrl = this.canvasManager.getThumbnailDataUrl(256);
-    StorageManager.savePageProgress(canvasPage.id, actions, thumbUrl);
+    StorageManager.savePageProgress(canvasPage.id, actions, thumbUrl, canvasPage.imageUrl);
   }
 
   /** Leaves the studio for the home screen; a natural break where a due ad may be shown. */
@@ -295,6 +295,8 @@ class App {
 // Bootstrap application once DOM and persistent storage are ready
 async function bootstrap() {
   await StorageManager.init();
+  // Drop saved fills that belong to replaced artwork
+  StorageManager.discardOutdatedProgress(PAGES);
   new App();
 }
 

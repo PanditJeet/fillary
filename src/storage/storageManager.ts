@@ -7,6 +7,8 @@ export interface PageProgress {
   dataUrl?: string; // High-resolution or preview thumbnail dataURL of color canvas
   actions: FillAction[]; // History of fill actions
   lastSaved: number;
+  /** Artwork file the progress was made on (fills are only valid for that exact drawing). */
+  art?: string;
 }
 
 const STORAGE_KEYS = {
@@ -153,7 +155,7 @@ export class StorageManager {
    * Saves both the pixel-perfect raster canvas state and action history.
    * Merges with existing progress so thumbnails or actions are never accidentally lost.
    */
-  public static savePageProgress(pageId: string, actions: FillAction[], dataUrl?: string): void {
+  public static savePageProgress(pageId: string, actions: FillAction[], dataUrl?: string, art?: string): void {
     if (!pageId) return;
     try {
       const existing = this.getPageProgress(pageId);
@@ -161,7 +163,8 @@ export class StorageManager {
         pageId,
         actions: actions || [],
         dataUrl: dataUrl || existing?.dataUrl,
-        lastSaved: Date.now()
+        lastSaved: Date.now(),
+        art: art || existing?.art
       };
       this.setItem(`${STORAGE_KEYS.PAGE_PROGRESS_PREFIX}${pageId}`, JSON.stringify(progress));
     } catch (e) {
@@ -219,6 +222,23 @@ export class StorageManager {
     const progress = this.getPageProgress(pageId);
     if (!progress) return false;
     return !!((progress.actions && progress.actions.length > 0) || progress.dataUrl);
+  }
+
+  /**
+   * Removes saved progress that was made on an older version of a page's artwork
+   * (e.g. after a picture is replaced with a new drawing), so old fills aren't
+   * replayed onto a different drawing. Progress from before artwork tracking is
+   * assumed to belong to the original .jpg artwork.
+   */
+  public static discardOutdatedProgress(pages: Array<{ id: string; imageUrl?: string }>): void {
+    for (const page of pages) {
+      const progress = this.getPageProgress(page.id);
+      if (!progress || !page.imageUrl) continue;
+      const art = progress.art ?? (page.imageUrl.endsWith('.png') ? 'legacy-jpg' : page.imageUrl);
+      if (art !== page.imageUrl) {
+        this.clearPageProgress(page.id);
+      }
+    }
   }
 
   /**
