@@ -14,9 +14,11 @@ import { AudioModal } from './ui/AudioModal.js';
 import { AdBreakCountdown } from './ui/AdBreakCountdown.js';
 import { showStudioIntro, studioIntroActive } from './ui/StudioIntro.js';
 import { LOW_END } from './services/deviceProfile.js';
+import { installScrollTapGuard } from './ui/scrollTapGuard.js';
 
 // Weak phones: drop costly blur effects (see .lite in theme.css)
 if (LOW_END) document.documentElement.classList.add('lite');
+installScrollTapGuard();
 import { App as CapApp } from '@capacitor/app';
 
 type ViewMode = 'home' | 'studio';

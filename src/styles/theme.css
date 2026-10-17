@@ -117,7 +117,7 @@ html, body {
   border: none;
   color: var(--text-secondary);
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   width: 36px;
@@ -185,7 +185,7 @@ html, body {
   font-size: 0.82rem;
   font-weight: 600;
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   display: flex;
@@ -267,7 +267,7 @@ html, body {
   padding: 5px 12px;
   border-radius: var(--radius-full);
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   white-space: nowrap;
@@ -308,7 +308,7 @@ html, body {
   align-items: center;
   gap: 6px;
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   transition: all 0.2s ease;
@@ -348,7 +348,7 @@ html, body {
   border-radius: 50%;
   border: none;
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   position: relative;
@@ -398,7 +398,7 @@ html, body {
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.15);
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   transition: transform 0.15s ease;
@@ -521,7 +521,7 @@ html, body {
   border-radius: var(--radius-lg);
   overflow: hidden;
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   transition: all 0.25s var(--transition-spring);
@@ -624,7 +624,7 @@ html, body {
   font-size: 0.78rem;
   font-weight: 500;
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   white-space: nowrap;
@@ -748,7 +748,7 @@ html, body {
   align-items: center;
   gap: 12px;
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -952,7 +952,7 @@ html, body {
   padding: 13px 28px;
   border-radius: var(--radius-full);
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   display: flex;
@@ -977,7 +977,7 @@ html, body {
   padding: 13px 24px;
   border-radius: var(--radius-full);
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   display: flex;
@@ -1007,7 +1007,7 @@ html, body {
   align-items: center;
   gap: 18px;
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   transition: all 0.25s var(--transition-spring);
@@ -1125,7 +1125,7 @@ html, body {
   font-size: 0.8rem;
   font-weight: 500;
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   transition: all 0.2s ease;
@@ -1156,7 +1156,7 @@ html, body {
   border-radius: var(--radius-lg);
   overflow: hidden;
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   transition: all 0.25s var(--transition-spring);
@@ -1349,7 +1349,7 @@ html, body {
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -1482,7 +1482,7 @@ html, body {
   color: #0D0F14;
   border-color: var(--text-primary);
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   box-shadow: 0 4px 20px rgba(255, 255, 255, 0.25);
@@ -1669,7 +1669,7 @@ html, body {
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid var(--border-subtle);
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   position: relative;
@@ -1721,7 +1721,7 @@ html, body {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border-subtle);
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   transition: all 0.2s ease;
@@ -1818,7 +1818,7 @@ html, body {
   border-radius: 50%;
   background: var(--accent-gold);
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
@@ -1849,7 +1849,7 @@ html, body {
   align-items: center;
   gap: 6px;
   cursor: default;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   transition: all 0.2s ease;
