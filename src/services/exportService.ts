@@ -1,6 +1,7 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 interface FillaryExportPlugin {
+  getBuildInfo(): Promise<{ debug: boolean }>;
   saveImage(options: { base64: string; fileName: string; share?: boolean }): Promise<{
     savedToGallery: boolean;
     shareOpened: boolean;
@@ -9,6 +10,16 @@ interface FillaryExportPlugin {
 
 // Native implementation lives in android/app/src/main/java/com/fillary/app/FillaryExportPlugin.java
 const FillaryExport = registerPlugin<FillaryExportPlugin>('FillaryExport');
+
+/** True when running a debug (test) build of the Android app. */
+export async function isDebugBuild(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return false;
+  try {
+    return (await FillaryExport.getBuildInfo()).debug === true;
+  } catch {
+    return false;
+  }
+}
 
 export type ExportResult = 'saved' | 'shared' | 'downloaded' | 'cancelled' | 'failed';
 

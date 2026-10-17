@@ -4,6 +4,7 @@ import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -32,6 +33,15 @@ import java.io.OutputStream;
 public class FillaryExportPlugin extends Plugin {
 
     private static final String TAG = "FillaryExport";
+
+    /** Tells the web app whether this is a debug (test) build, so it can use test ads. */
+    @PluginMethod
+    public void getBuildInfo(PluginCall call) {
+        boolean debug = (getContext().getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        JSObject ret = new JSObject();
+        ret.put("debug", debug);
+        call.resolve(ret);
+    }
 
     @PluginMethod
     public void saveImage(PluginCall call) {

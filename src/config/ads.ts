@@ -14,7 +14,7 @@
  * (ADMOB_APP_ID) or the ADMOB_APP_ID environment variable.
  */
 
-const TEST_UNITS = {
+export const TEST_UNITS = {
   android: {
     interstitial: 'ca-app-pub-3940256099942544/1033173712',
     rewarded: 'ca-app-pub-3940256099942544/5224354917',

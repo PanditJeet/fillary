@@ -7,10 +7,14 @@ import {
 } from '@capacitor-community/admob';
 import { Toast } from '../ui/Toast.js';
 import { StorageManager } from '../storage/storageManager.js';
-import { AD_UNITS, USE_TEST_ADS, AdUnitSet } from '../config/ads.js';
+import { AD_UNITS, USE_TEST_ADS, TEST_UNITS, AdUnitSet } from '../config/ads.js';
+import { isDebugBuild } from './exportService.js';
 
 export class AdService {
   private static initialized = false;
+  /** Test ads in dev mode and in debug APKs (so testers can never click real ads). */
+  private static useTestAds = USE_TEST_ADS;
+  private static units: { android: AdUnitSet; ios: AdUnitSet } = AD_UNITS;
   /** False only if the user's consent (EEA/UK) doesn't allow ad requests. */
   private static canRequestAds = true;
   private static privacyOptionsRequired = false;
@@ -36,7 +40,7 @@ export class AdService {
 
   private static adIds(): AdUnitSet {
     const platform = Capacitor.getPlatform() === 'ios' ? 'ios' : 'android';
-    return AD_UNITS[platform];
+    return this.units[platform];
   }
 
   /**
@@ -51,9 +55,13 @@ export class AdService {
 
     if (Capacitor.isNativePlatform()) {
       try {
+        if (await isDebugBuild()) {
+          this.useTestAds = true;
+          this.units = TEST_UNITS;
+        }
         await AdMob.initialize({
-          initializeForTesting: USE_TEST_ADS,
-          testingDevices: USE_TEST_ADS ? ['EMULATOR'] : [],
+          initializeForTesting: this.useTestAds,
+          testingDevices: this.useTestAds ? ['EMULATOR'] : [],
           tagForChildDirectedTreatment: true,
           tagForUnderAgeOfConsent: true,
           maxAdContentRating: MaxAdContentRating.General
@@ -61,7 +69,7 @@ export class AdService {
 
         await this.gatherConsent();
         this.initialized = true;
-        console.log(`[AdService] AdMob initialized (${USE_TEST_ADS ? 'TEST ads' : 'production ads'}, canRequestAds=${this.canRequestAds}).`);
+        console.log(`[AdService] AdMob initialized (${this.useTestAds ? 'TEST ads' : 'production ads'}, canRequestAds=${this.canRequestAds}).`);
         this.preloadInterstitial();
       } catch (err) {
         console.warn('[AdService] AdMob native initialization failed:', err);
@@ -101,7 +109,7 @@ export class AdService {
     if (!Capacitor.isNativePlatform() || !this.initialized || !this.canRequestAds || this.interstitialReady) return;
     this.interstitialReady = AdMob.prepareInterstitial({
       adId: this.adIds().interstitial,
-      isTesting: USE_TEST_ADS
+      isTesting: this.useTestAds
     })
       .then(() => {
         this.interstitialLoaded = true;
@@ -291,7 +299,7 @@ export class AdService {
     try {
       await AdMob.prepareRewardVideoAd({
         adId: this.adIds().rewarded,
-        isTesting: USE_TEST_ADS
+        isTesting: this.useTestAds
       });
 
       let earned = false;
