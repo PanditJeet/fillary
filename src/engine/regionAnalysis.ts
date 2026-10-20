@@ -17,6 +17,14 @@ export interface LineArtAnalysis {
 const TINY_MAX_AREA = 80;
 const ORPHAN_MAX_LINE = 6;
 const PAD = 3;
+const NECK_RADIUS = 2;
+const SPLIT_MIN_AREA = 150;
+const SPLIT_MAX_AREA = 6000;
+const BLOB_RADIUS = 6;
+const BLOB_MIN_CONTACT = 30;
+const BLOB_MIN_SHARE = 0.2;
+const SHINE_MIN_AREA = 10;
+const SHINE_RING = 5;
 
 /**
  * Turns a decoded picture into line art in place: light pixels become transparent
@@ -88,9 +96,171 @@ export function analyzeLineArt(rgba: Uint8ClampedArray, size: number): LineArtAn
     }
   }
 
+  sealEyeOpenings(lineArtMask, gapMask, W);
+
   const labels = new Uint32Array(N);
   const tinyRegions = computeTinyRegions(lineArtMask, rawMask, W, labels);
   return { lineArtMask, gapMask, tinyRegions, labels };
+}
+
+/**
+ * Chessboard distance from every pixel to the nearest `seed` pixel (capped at 255).
+ * Two-pass chamfer: fast enough to run on every page open.
+ */
+function chessDistance(seed: Uint8Array, W: number): Uint8Array {
+  const N = W * W;
+  const dist = new Uint8Array(N);
+  for (let i = 0; i < N; i++) dist[i] = seed[i] ? 0 : 255;
+  for (let y = 0; y < W; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      let d = dist[i];
+      if (!d) continue;
+      if (x > 0 && dist[i - 1] + 1 < d) d = dist[i - 1] + 1;
+      if (y > 0) {
+        const u = i - W;
+        if (dist[u] + 1 < d) d = dist[u] + 1;
+        if (x > 0 && dist[u - 1] + 1 < d) d = dist[u - 1] + 1;
+        if (x < W - 1 && dist[u + 1] + 1 < d) d = dist[u + 1] + 1;
+      }
+      dist[i] = d;
+    }
+  }
+  for (let y = W - 1; y >= 0; y--) {
+    for (let x = W - 1; x >= 0; x--) {
+      const i = y * W + x;
+      let d = dist[i];
+      if (!d) continue;
+      if (x < W - 1 && dist[i + 1] + 1 < d) d = dist[i + 1] + 1;
+      if (y < W - 1) {
+        const b = i + W;
+        if (dist[b] + 1 < d) d = dist[b] + 1;
+        if (x > 0 && dist[b - 1] + 1 < d) d = dist[b - 1] + 1;
+        if (x < W - 1 && dist[b + 1] + 1 < d) d = dist[b + 1] + 1;
+      }
+      dist[i] = d;
+    }
+  }
+  return dist;
+}
+
+/**
+ * Seals off small areas that touch a solid black shape (a pupil, a nose) and only
+ * join a bigger area through a narrow opening, e.g. the white of an eye drawn as an
+ * open crescent. Without this, filling the face also floods the eye.
+ *
+ * Areas are shrunk by NECK_RADIUS px so narrow openings disappear, the pieces left over
+ * are grown back, and qualifying pieces get a wall of invisible gap pixels (colored
+ * together with the area they border). Only pieces next to solid black shapes qualify,
+ * so decorative open strokes elsewhere (wing patterns, fur) keep coloring as one area.
+ */
+function sealEyeOpenings(mask: Uint8Array, gapMask: Uint8Array, W: number): void {
+  const N = W * W;
+
+  // 1. Solid black shapes: line pixels inside a stroke at least 2*BLOB_RADIUS thick
+  const notLine = new Uint8Array(N);
+  for (let i = 0; i < N; i++) notLine[i] = mask[i] ? 0 : 1;
+  const depth = chessDistance(notLine, W);
+  const blobCore = new Uint8Array(N);
+  let anyBlob = false;
+  for (let i = 0; i < N; i++) if (depth[i] > BLOB_RADIUS) { blobCore[i] = 1; anyBlob = true; }
+  if (!anyBlob) return;
+  const nearBlob = chessDistance(blobCore, W);
+
+  // 2. Label the shrunken areas (4-connected)
+  const dist = chessDistance(mask, W);
+  const owner = new Int32Array(N);
+  const queue = new Int32Array(N);
+  let count = 0;
+  for (let s = 0; s < N; s++) {
+    if (owner[s] || dist[s] <= NECK_RADIUS) continue;
+    count++;
+    let qh = 0, qt = 0;
+    queue[qt++] = s;
+    owner[s] = count;
+    while (qh < qt) {
+      const p = queue[qh++];
+      const x = p % W;
+      if (x > 0 && !owner[p - 1] && dist[p - 1] > NECK_RADIUS) { owner[p - 1] = count; queue[qt++] = p - 1; }
+      if (x < W - 1 && !owner[p + 1] && dist[p + 1] > NECK_RADIUS) { owner[p + 1] = count; queue[qt++] = p + 1; }
+      if (p >= W && !owner[p - W] && dist[p - W] > NECK_RADIUS) { owner[p - W] = count; queue[qt++] = p - W; }
+      if (p < N - W && !owner[p + W] && dist[p + W] > NECK_RADIUS) { owner[p + W] = count; queue[qt++] = p + W; }
+    }
+  }
+  if (count < 2) return;
+
+  // 3. Grow them back over the rest of their area (never crossing lines)
+  let qh = 0, qt = 0;
+  for (let i = 0; i < N; i++) if (owner[i]) queue[qt++] = i;
+  while (qh < qt) {
+    const p = queue[qh++];
+    const o = owner[p];
+    const x = p % W;
+    if (x > 0 && !owner[p - 1] && !mask[p - 1]) { owner[p - 1] = o; queue[qt++] = p - 1; }
+    if (x < W - 1 && !owner[p + 1] && !mask[p + 1]) { owner[p + 1] = o; queue[qt++] = p + 1; }
+    if (p >= W && !owner[p - W] && !mask[p - W]) { owner[p - W] = o; queue[qt++] = p - W; }
+    if (p < N - W && !owner[p + W] && !mask[p + W]) { owner[p + W] = o; queue[qt++] = p + W; }
+  }
+
+  // 4. Qualifying pieces: small, and bordering a solid black shape along a good part of their edge
+  const areas = new Int32Array(count + 1);
+  const contact = new Int32Array(count + 1);
+  const edge = new Int32Array(count + 1);
+  for (let i = 0; i < N; i++) {
+    const o = owner[i];
+    areas[o]++;
+    // within 1px of a stroke that is part of a solid black shape
+    if (o && dist[i] === 1) { edge[o]++; if (nearBlob[i] <= BLOB_RADIUS + 1) contact[o]++; }
+  }
+  const seal = new Uint8Array(count + 1);
+  for (let c = 1; c <= count; c++) {
+    seal[c] = areas[c] >= SPLIT_MIN_AREA && areas[c] <= SPLIT_MAX_AREA && contact[c] >= BLOB_MIN_CONTACT &&
+      contact[c] >= edge[c] * BLOB_MIN_SHARE ? 1 : 0;
+  }
+
+  // 5. Wall off qualifying pieces wherever they touch a bigger piece
+  const wall = (a: number, b: number) =>
+    b !== 0 && b !== a && ((seal[a] && areas[b] > areas[a]) || (seal[b] && areas[a] > areas[b]));
+  for (let y = 0; y < W; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      const a = owner[i];
+      if (!a) continue;
+      if ((x < W - 1 && wall(a, owner[i + 1])) || (y < W - 1 && wall(a, owner[i + W]))) {
+        mask[i] = 1;
+        gapMask[i] = 1;
+      }
+    }
+  }
+}
+
+/**
+ * True for a round white dot sitting inside a solid black shape, i.e. the shine of a
+ * pupil. Slivers where strokes meet are wedge-shaped or have open space nearby.
+ */
+function isEyeShine(group: number[], raw: Uint8Array, G: number, W: number): boolean {
+  if (group.length < SHINE_MIN_AREA) return false;
+  let x0 = G, x1 = -1, y0 = G, y1 = -1;
+  for (const p of group) {
+    const x = p % G, y = (p / G) | 0;
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+  }
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  if (Math.max(w, h) > Math.min(w, h) * 1.5) return false;
+  if (group.length < w * h * (Math.PI / 4) * 0.9) return false; // not a filled round dot
+  // Almost everything around the dot must be line
+  let line = 0, total = 0;
+  for (let y = Math.max(1, y0 - SHINE_RING); y <= Math.min(W, y1 + SHINE_RING); y++) {
+    for (let x = Math.max(1, x0 - SHINE_RING); x <= Math.min(W, x1 + SHINE_RING); x++) {
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) continue;
+      total++;
+      if (raw[y * G + x]) line++;
+    }
+  }
+  return line >= total * 0.88;
 }
 
 /**
@@ -99,7 +269,7 @@ export function analyzeLineArt(rgba: Uint8ClampedArray, size: number): LineArtAn
  *  - gap-seal pixels (narrow strips between close lines), and
  *  - tiny enclosed pockets (≤ TINY_MAX_AREA px), e.g. slivers where strokes meet.
  * Small but round shapes (e.g. flower petals) stay independently tappable, and pockets
- * behind thick outlines (e.g. eye shines) are left alone.
+ * behind thick outlines or inside small pupils (eye shines) are left alone.
  *
  * Works on a grid with a 1px wall border (G = W + 2) so neighbour lookups need no
  * bounds checks or divisions — this is the hot path when a page opens.
@@ -225,6 +395,7 @@ function computeTinyRegions(mask: Uint8Array, rawMask: Uint8Array, W: number, la
       }
     }
     if (group.length > TINY_MAX_AREA * 4) continue; // large enclosed areas stay independent
+    if (isEyeShine(group, raw, G, W)) continue; // white dots inside pupils stay white
     stamp++;
     let frontier: number[] = [];
     for (const p of group) { seen[p] = stamp; frontier.push(p); }
